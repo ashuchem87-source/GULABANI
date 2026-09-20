@@ -32,7 +32,7 @@ workflows:
         script: |
           cd "$CM_BUILD_DIR/artifacts/flowpilot/android"
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug --stacktrace --info
 
     artifacts:
       - artifacts/flowpilot/android/app/build/outputs/**/*.apk
