@@ -4,8 +4,9 @@ workflows:
     max_build_duration: 120
     instance_type: mac_mini_m2
 
-    environment:
-      node: 22.11.0
+environment:
+  node: 22.11.0
+  java: 21
 
     scripts:
       - name: Setup pnpm
