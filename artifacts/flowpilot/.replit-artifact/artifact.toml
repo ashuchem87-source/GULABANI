@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/"
+title = "FlowPilot"
+description = "A mobile project workflow app that automatically assigns reusable step templates, tracks deadlines, and keeps the next action visible with reminders and progress summaries."
+version = "1.0.0"
+id = "artifacts/flowpilot"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/" ]
+localPort = 22123
+
+[services.development]
+run = "pnpm --filter @workspace/flowpilot run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/flowpilot", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/flowpilot", "run", "serve" ]
+
+[services.env]
+PORT = "22123"
+BASE_PATH = "/"

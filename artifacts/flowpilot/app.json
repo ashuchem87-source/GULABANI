@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "GULABANI",
+    "slug": "gulabani",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "gulabani",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.gulabani.app"
+    },
+    "android": {
+      "package": "com.gulabani.app"
+    },
+    "web": {
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-notifications"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "fb71a3be-52df-4b9b-9bdb-357b8f1fd311"
+      }
+    }
+  }
+}
