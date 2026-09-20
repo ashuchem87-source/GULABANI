@@ -28,11 +28,11 @@ workflows:
           java -version
           echo "JAVA_HOME=$JAVA_HOME"
 
-      - name: Build Android APK
+      - name: Build Android Release APK
         script: |
           cd "$CM_BUILD_DIR/artifacts/flowpilot/android"
           chmod +x gradlew
-          ./gradlew assembleDebug --no-configuration-cache --stacktrace --info
+          ./gradlew assembleRelease --stacktrace --info
 
     artifacts:
       - artifacts/flowpilot/android/app/build/outputs/**/*.apk
