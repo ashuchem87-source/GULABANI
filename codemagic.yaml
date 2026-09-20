@@ -8,10 +8,6 @@ workflows:
       node: 22.11.0
 
     scripts:
-      - name: Install pnpm
-        script: |
-          npm install -g pnpm@12.5.1
-
       - name: Install dependencies
         script: |
           pnpm install --frozen-lockfile
