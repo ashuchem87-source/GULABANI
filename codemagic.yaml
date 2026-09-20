@@ -1,0 +1,30 @@
+workflows:
+  android-apk:
+    name: GULABANI Android APK
+    max_build_duration: 120
+    instance_type: linux_x2
+
+    environment:
+      node: 22.11.0
+
+    scripts:
+      - name: Install pnpm
+        script: |
+          npm install -g pnpm@12.5.1
+
+      - name: Install dependencies
+        script: |
+          pnpm install --frozen-lockfile
+
+      - name: Set Android SDK location
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/artifacts/flowpilot/android/local.properties"
+
+      - name: Build Android APK
+        script: |
+          cd "$CM_BUILD_DIR/artifacts/flowpilot/android"
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+    artifacts:
+      - artifacts/flowpilot/android/app/build/outputs/**/*.apk
