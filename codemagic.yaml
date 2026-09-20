@@ -8,6 +8,12 @@ workflows:
       node: 22.11.0
 
     scripts:
+      - name: Setup pnpm
+        script: |
+          npm install -g corepack@latest
+          corepack enable
+          corepack prepare pnpm@12.5.1 --activate
+
       - name: Install dependencies
         script: |
           pnpm install --frozen-lockfile
