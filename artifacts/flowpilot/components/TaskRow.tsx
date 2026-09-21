@@ -18,7 +18,7 @@ export function TaskRow({ task, compact = false }: { task: ProjectTask; compact?
       testID={`task-${task.id}`}
       onPress={() => {
         Haptics.selectionAsync();
-        toggleTask(task.id);
+        toggleTask(task.id, task.projectId);
       }}
       style={({ pressed }) => [styles.row, compact && styles.compact, { borderBottomColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
     >

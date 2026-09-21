@@ -2,58 +2,7 @@
 // Exercises the real provider with an in-memory AsyncStorage and hook host.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
-const ts = require('typescript');
-
-const source = fs.readFileSync(path.join(__dirname, '../context/FlowContext.tsx'), 'utf8');
-const compiled = ts.transpileModule(source, { compilerOptions: {
-  module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX,
-  target: ts.ScriptTarget.ES2020, esModuleInterop: true,
-} }).outputText;
-
-function host(storage) {
-  const state = [], deps = [];
-  let cursor = 0, effectCursor = 0, effects = [];
-  const react = {
-    createContext: () => ({ Provider: 'Provider' }),
-    useState: (initial) => {
-      const index = cursor++;
-      if (!(index in state)) state[index] = typeof initial === 'function' ? initial() : initial;
-      return [state[index], (value) => { state[index] = typeof value === 'function' ? value(state[index]) : value; }];
-    },
-    useEffect: (callback, nextDeps) => {
-      const index = effectCursor++;
-      if (!deps[index] || nextDeps.some((value, i) => value !== deps[index][i])) effects.push(callback);
-      deps[index] = nextDeps;
-    },
-    useMemo: (callback) => callback(),
-  };
-  const module = { exports: {} };
-  vm.runInNewContext(compiled, { exports: module.exports, module, require: (name) => {
-    if (name === 'react') return react;
-    if (name === 'react/jsx-runtime') return { jsx: (type, props) => ({ type, props }) };
-    if (name === '@react-native-async-storage/async-storage') return {
-      getItem: async () => storage.value ?? null,
-      setItem: async (key, value) => { assert.equal(key, 'flowpilot-state-v1'); storage.value = value; },
-    };
-    if (name === '@/lib/notifications') return { scheduleProjectReminders: async () => true };
-    throw new Error(name);
-  } });
-  return async () => {
-    let value;
-    for (let pass = 0; pass < 3; pass++) {
-      cursor = 0; effectCursor = 0; effects = [];
-      value = module.exports.FlowProvider({ children: null }).props.value;
-      effects.forEach((effect) => effect());
-      await new Promise(setImmediate);
-    }
-    return value;
-  };
-}
-
-const plain = (value) => JSON.parse(JSON.stringify(value));
+const { host, plain } = require('./flow-test-host.cjs');
 test('legacy CII SELF: edit, unlimited steps, project isolation, delete and reload', async () => {
   const storage = {};
   let render = host(storage);

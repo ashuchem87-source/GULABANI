@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { scheduleProjectReminders } from '@/lib/notifications';
+import { parseTaskDate } from '@/lib/task-utils';
 
 export type ReminderFrequency = 'Daily' | 'Every 2 days' | 'Weekly';
 export type TaskStatus = 'todo' | 'done';
@@ -39,6 +40,7 @@ export type ProjectTask = WorkflowStep & {
   dueDate: string;
   order: number;
   completedAt?: string;
+  isManual?: boolean;
 };
 
 type FlowContextValue = {
@@ -62,7 +64,8 @@ type FlowContextValue = {
     dueDate: string;
     reminderFrequency: ReminderFrequency;
   }) => void;
-  toggleTask: (taskId: string) => void;
+  addManualTask: (projectId: string, input: { title: string; dueDate: string }) => boolean;
+  toggleTask: (taskId: string, projectId?: string) => void;
   updateReminderFrequency: (projectId: string, frequency: ReminderFrequency) => void;
   enableProjectReminders: (projectId: string) => Promise<boolean>;
   deleteProject: (projectId: string) => void;
@@ -171,6 +174,8 @@ function recalculateTimeline(project: Project, projectTasks: ProjectTask[]) {
   const updatedTasks = [...projectTasks]
     .sort((a, b) => a.order - b.order)
     .map((task) => {
+      // Manual dates are independent of the sequential workflow timeline.
+      if (task.isManual) return task;
       if (task.status === 'done') {
         const completedAt = task.completedAt ?? task.dueDate;
         const completedDate = new Date(completedAt);
@@ -287,14 +292,43 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
     await scheduleProjectReminders(project, newTasks);
   };
 
-  const toggleTask = (taskId: string) => {
-    const task = tasks.find((item) => item.id === taskId);
+  const addManualTask: FlowContextValue['addManualTask'] = (projectId, input) => {
+    const project = projects.find((item) => item.id === projectId);
+    const dueDate = parseTaskDate(input.dueDate);
+    if (!hydrated || !project || !input.title.trim() || !dueDate) return false;
+    const task: ProjectTask = {
+      id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      projectId, title: input.title.trim(), description: '', duration: 0,
+      status: 'todo', dueDate: dueDate.toISOString(),
+      order: tasks.filter((item) => item.projectId === projectId).reduce((max, item) => Math.max(max, item.order), -1) + 1,
+      isManual: true,
+    };
+    setTasks((current) => [...current, {
+      ...task, order: current.filter((item) => item.projectId === projectId)
+        .reduce((max, item) => Math.max(max, item.order), -1) + 1,
+    }]);
+    if (project.remindersEnabled) void scheduleProjectReminders(project, [...tasks, task], false);
+    return true;
+  };
+
+  const toggleTask = (taskId: string, projectId?: string) => {
+    const task = tasks.find((item) => item.id === taskId && (!projectId || item.projectId === projectId));
     const project = task ? projects.find((item) => item.id === task.projectId) : undefined;
     if (!task || !project) return;
 
+    if (task.isManual) {
+      const nextTasks = tasks.map((item) => item.projectId === project.id && item.id === task.id ? {
+        ...item, status: task.status === 'done' ? 'todo' as const : 'done' as const,
+        completedAt: task.status === 'done' ? undefined : new Date().toISOString(),
+      } : item);
+      setTasks(nextTasks);
+      if (project.remindersEnabled) void scheduleProjectReminders(project, nextTasks, false);
+      return;
+    }
+
     const reopening = task.status === 'done';
     const nextTasks: ProjectTask[] = tasks.map((item) => {
-      if (item.projectId !== task.projectId) return item;
+      if (item.projectId !== task.projectId || item.isManual) return item;
       if (reopening && item.order >= task.order) {
         return { ...item, status: 'todo' as const, completedAt: undefined };
       }
@@ -332,7 +366,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   };
 
   const value = useMemo(
-    () => ({ projects, tasks, templates: templateList, hydrated, addTemplate, updateTemplate, deleteTemplate, addProject, toggleTask, updateReminderFrequency, enableProjectReminders, deleteProject }),
+    () => ({ projects, tasks, templates: templateList, hydrated, addTemplate, updateTemplate, deleteTemplate, addProject, addManualTask, toggleTask, updateReminderFrequency, enableProjectReminders, deleteProject }),
     [projects, tasks, templateList, hydrated],
   );
 

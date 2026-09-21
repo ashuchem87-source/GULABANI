@@ -5,20 +5,21 @@ import { AppText } from '@/components/AppText';
 import { TaskRow } from '@/components/TaskRow';
 import { daysRemaining, useFlow } from '@/context/FlowContext';
 import { useColors } from '@/hooks/useColors';
+import { openTasksByDueDate } from '@/lib/task-utils';
 
 export default function TasksScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { tasks } = useFlow();
-  const openTasks = [...tasks].filter((task) => task.status === 'todo').sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  const openTasks = openTasksByDueDate(tasks);
   const doneTasks = tasks.filter((task) => task.status === 'done');
   return (
     <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={[styles.content, { paddingTop: Platform.OS === 'web' ? 67 : insets.top + 18, paddingBottom: insets.bottom + 90 }]} showsVerticalScrollIndicator={false}>
       <View style={styles.header}><View><AppText style={[styles.kicker, { color: colors.primary }]}>THE DAILY LIST</AppText><AppText style={styles.title}>To-do</AppText><AppText style={[styles.subtitle, { color: colors.mutedForeground }]}>One next action at a time.</AppText></View><View style={[styles.count, { backgroundColor: colors.foreground }]}><AppText style={[styles.countNumber, { color: colors.background }]}>{openTasks.length}</AppText><AppText style={[styles.countLabel, { color: '#B7C1D4' }]}>open</AppText></View></View>
       <View style={[styles.callout, { backgroundColor: colors.accent }]}><Feather name="bell" size={16} color={colors.accentForeground} /><AppText style={[styles.calloutText, { color: colors.accentForeground }]}>Your list is sorted by what needs attention first.</AppText></View>
       <AppText style={[styles.groupTitle, { color: colors.mutedForeground }]}>UP NEXT</AppText>
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>{openTasks.length ? openTasks.map((task) => <TaskRow key={task.id} task={task} />) : <AppText style={[styles.empty, { color: colors.mutedForeground }]}>Your work is clear for now.</AppText>}</View>
-      {doneTasks.length ? <><AppText style={[styles.groupTitle, { color: colors.mutedForeground, marginTop: 19 }]}>COMPLETED</AppText><View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>{doneTasks.map((task) => <TaskRow key={task.id} task={task} />)}</View></> : null}
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>{openTasks.length ? openTasks.map((task) => <TaskRow key={`${task.projectId}:${task.id}`} task={task} />) : <AppText style={[styles.empty, { color: colors.mutedForeground }]}>Your work is clear for now.</AppText>}</View>
+      {doneTasks.length ? <><AppText style={[styles.groupTitle, { color: colors.mutedForeground, marginTop: 19 }]}>COMPLETED</AppText><View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>{doneTasks.map((task) => <TaskRow key={`${task.projectId}:${task.id}`} task={task} />)}</View></> : null}
       {openTasks.some((task) => daysRemaining(task.dueDate) < 0) ? <AppText style={[styles.note, { color: colors.primary }]}>A few tasks are past their suggested date. Finish one small thing next.</AppText> : null}
     </ScrollView>
   );

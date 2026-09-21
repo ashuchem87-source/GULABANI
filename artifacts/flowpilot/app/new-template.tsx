@@ -1,12 +1,13 @@
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText } from '@/components/AppText';
 import { WorkflowStep, WorkflowTemplate, useFlow } from '@/context/FlowContext';
 import { useColors } from '@/hooks/useColors';
+import { ReorderableSteps, type ScrollMetrics } from '@/components/ReorderableSteps';
 
 export default function NewTemplateScreen() {
   const { templateId } = useLocalSearchParams<{ templateId?: string }>();
@@ -18,6 +19,9 @@ export default function NewTemplateScreen() {
 }
 
 function TemplateForm({ template }: { template?: WorkflowTemplate }) {
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollMetrics = useRef<ScrollMetrics>({ offset: 0, height: 0, contentHeight: 0, top: 0 });
+  const [dragging, setDragging] = useState(false);
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { addTemplate, updateTemplate } = useFlow();
@@ -58,7 +62,11 @@ function TemplateForm({ template }: { template?: WorkflowTemplate }) {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: Platform.OS === 'web' ? 24 : insets.top + 14, paddingBottom: insets.bottom + 34 }]} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollRef} scrollEnabled={!dragging} scrollEventThrottle={16} removeClippedSubviews={false}
+        onScroll={(event) => { scrollMetrics.current.offset = event.nativeEvent.contentOffset.y; }}
+        onLayout={(event) => { scrollMetrics.current.height = event.nativeEvent.layout.height; }}
+        onContentSizeChange={(_width, height) => { scrollMetrics.current.contentHeight = height; }}
+        contentContainerStyle={[styles.content, { paddingTop: Platform.OS === 'web' ? 24 : insets.top + 14, paddingBottom: insets.bottom + 34 }]} keyboardShouldPersistTaps="handled">
         <View style={styles.top}><Pressable onPress={() => router.back()} hitSlop={10}><Feather name="arrow-left" size={22} color={colors.foreground} /></Pressable><AppText style={styles.topTitle}>{template ? 'Edit template' : 'New template'}</AppText><View style={{ width: 22 }} /></View>
         <AppText style={styles.heading}>{template ? 'Update your repeatable flow.' : 'Build your repeatable flow.'}</AppText>
         <AppText style={[styles.intro, { color: colors.mutedForeground }]}>These steps will be available every time you start a matching project.</AppText>
@@ -68,14 +76,14 @@ function TemplateForm({ template }: { template?: WorkflowTemplate }) {
         <Field label="DESCRIPTION" value={description} onChangeText={setDescription} placeholder="What kind of work is this flow for?" colors={colors} multiline />
 
         <View style={styles.stepHeading}><AppText style={styles.label}>WORKFLOW STEPS</AppText><AppText style={[styles.stepHint, { color: colors.mutedForeground }]}>{steps.length} steps</AppText></View>
-        {steps.map((step, index) => (
+        <ReorderableSteps steps={steps} onChange={setSteps} scrollRef={scrollRef} metrics={scrollMetrics} onDragging={setDragging} renderStep={(step, index) => (
           <View key={step.id} style={[styles.stepCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={[styles.stepNumber, { backgroundColor: colors.foreground }]}><AppText style={[styles.stepNumberText, { color: colors.background }]}>{index + 1}</AppText></View>
             <TextInput testID={`template-step-${index + 1}`} value={step.title} onChangeText={(value) => updateStep(step.id, value)} placeholder="Name this step" placeholderTextColor={colors.mutedForeground} style={[styles.stepInput, { color: colors.foreground }]} />
             <View style={[styles.durationInput, { borderLeftColor: colors.border }]}><TextInput value={String(step.duration)} onChangeText={(value) => updateStepDuration(step.id, value)} keyboardType="number-pad" style={[styles.durationText, { color: colors.foreground }]} /><AppText style={[styles.durationSuffix, { color: colors.mutedForeground }]}>days</AppText></View>
             <Pressable accessibilityRole="button" accessibilityLabel={`Delete step ${index + 1}`} testID={`delete-template-step-${index + 1}`} onPress={() => setSteps((current) => current.filter((item) => item.id !== step.id))} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}><Feather name="trash-2" size={17} color={colors.mutedForeground} /></Pressable>
           </View>
-        ))}
+        )} />
         <Pressable onPress={addStep} style={({ pressed }) => [styles.addStep, { borderColor: colors.input, opacity: pressed ? 0.65 : 1 }]}><Feather name="plus" size={15} color={colors.primary} /><AppText style={[styles.addStepText, { color: colors.primary }]}>Add another step</AppText></Pressable>
 
         {!canSave && <AppText style={[styles.stepHint, { color: colors.mutedForeground }]}>Enter a template name and at least one step. Every step needs a name.</AppText>}
