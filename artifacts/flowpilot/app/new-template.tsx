@@ -88,7 +88,7 @@ function TemplateForm({ template }: { template?: WorkflowTemplate }) {
 
         {!canSave && <AppText style={[styles.stepHint, { color: colors.mutedForeground }]}>Enter a template name and at least one step. Every step needs a name.</AppText>}
         <View style={[styles.preview, { backgroundColor: colors.secondary }]}><Feather name="layers" size={16} color={colors.primary} /><View style={{ flex: 1 }}><AppText style={styles.previewTitle}>Ready to reuse</AppText><AppText style={[styles.previewText, { color: colors.mutedForeground }]}>{template ? 'Changes apply to future projects. Existing projects keep their current tasks.' : 'Your template will appear in the Templates tab and can be selected when creating a project.'}</AppText></View></View>
-        <Pressable testID="save-template" disabled={!canSave} onPress={save} style={({ pressed }) => [styles.save, { backgroundColor: canSave ? colors.primary : colors.input, opacity: pressed ? 0.78 : 1 }]}><AppText style={styles.saveText}>Save template</AppText><Feather name="check" size={17} color="#FFFFFF" /></Pressable>
+        <Pressable testID="save-template" disabled={!canSave} onPress={save} style={({ pressed }) => [styles.save, { backgroundColor: canSave ? colors.action : colors.input, opacity: pressed ? 0.78 : 1 }]}><AppText style={styles.saveText}>Save template</AppText><Feather name="check" size={17} color="#FFFFFF" /></Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );

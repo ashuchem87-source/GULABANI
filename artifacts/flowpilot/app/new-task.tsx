@@ -38,7 +38,7 @@ export default function NewTaskScreen() {
         <AppText style={[styles.intro, { color: colors.mutedForeground }]}>Enter a valid date as YYYY-MM-DD. Past dates are allowed.</AppText>
         <View style={[styles.note, { backgroundColor: colors.secondary }]}><Feather name="bell" size={16} color={colors.primary} /><AppText style={[styles.noteText, { color: colors.mutedForeground }]}>Reminders use this project's settings. Individual task reminders are not available. You can manage reminders on the project screen.</AppText></View>
         {!!error && <AppText style={{ color: colors.destructive }}>{error}</AppText>}
-        <Pressable testID="save-manual-task" accessibilityRole="button" disabled={!canSave} onPress={save} style={[styles.save, { backgroundColor: canSave ? colors.primary : colors.input }]}><Feather name="plus" size={17} color="#FFFFFF" /><AppText style={styles.saveText}>Add task</AppText></Pressable>
+        <Pressable testID="save-manual-task" accessibilityRole="button" disabled={!canSave} onPress={save} style={[styles.save, { backgroundColor: canSave ? colors.action : colors.input }]}><Feather name="plus" size={17} color="#FFFFFF" /><AppText style={styles.saveText}>Add task</AppText></Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );

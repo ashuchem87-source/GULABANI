@@ -4,6 +4,14 @@ import { Platform } from 'react-native';
 import type { Project, ProjectTask } from '@/context/FlowContext';
 import { calendarDaysUntil } from '@/lib/task-utils';
 
+let masterEnabled = true;
+let queue: Promise<unknown> = Promise.resolve();
+function serialized<T>(work: () => Promise<T>): Promise<T> {
+  const run = queue.catch(() => undefined).then(work);
+  queue = run;
+  return run;
+}
+
 const REMINDER_IDS_KEY = 'flowpilot-scheduled-reminder-ids-v1';
 
 if (Platform.OS !== 'web') {
@@ -54,11 +62,12 @@ function remainingLabel(days: number) {
   return `${days} days remaining`;
 }
 
-export async function scheduleProjectReminders(project: Project, tasks: ProjectTask[], askForPermission = true) {
+async function schedule(project: Project, tasks: ProjectTask[], askForPermission = true) {
   if (Platform.OS === 'web') return false;
   await cancelProjectReminders(project.id);
+  if (!masterEnabled) return false;
   const allowed = askForPermission ? await requestReminderPermission() : (await Notifications.getPermissionsAsync()).granted;
-  if (!allowed || !project.remindersEnabled) return allowed;
+  if (!masterEnabled || !allowed || !project.remindersEnabled) return allowed;
 
   const nextTask = tasks
     .filter((task) => task.projectId === project.id && task.status === 'todo')
@@ -73,23 +82,43 @@ export async function scheduleProjectReminders(project: Project, tasks: ProjectT
   projectDeadline.setHours(23, 59, 59, 999);
   const interval = cadenceInDays(project);
   const ids: string[] = [];
-  for (let fireAt = new Date(firstReminder); fireAt <= projectDeadline && ids.length < 60; fireAt.setDate(fireAt.getDate() + interval)) {
-    const days = calendarDaysUntil(nextTask.dueDate, fireAt);
-    const id = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'FlowPilot · Next step',
-        body: `${nextTask.title} · ${remainingLabel(days)} in ${project.name}`,
-        data: { projectId: project.id, taskId: nextTask.id },
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: new Date(fireAt),
-      },
-    });
-    ids.push(id);
+  try {
+    for (let fireAt = new Date(firstReminder); masterEnabled && fireAt <= projectDeadline && ids.length < 60; fireAt.setDate(fireAt.getDate() + interval)) {
+      const days = calendarDaysUntil(nextTask.dueDate, fireAt);
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'FlowPilot · Next step',
+          body: `${nextTask.title} · ${remainingLabel(days)} in ${project.name}`,
+          data: { projectId: project.id, taskId: nextTask.id },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: new Date(fireAt),
+        },
+      });
+      ids.push(id);
+    }
+  } finally {
+    const stored = await readReminderIds();
+    stored[project.id] = ids;
+    await AsyncStorage.setItem(REMINDER_IDS_KEY, JSON.stringify(stored));
   }
-  const stored = await readReminderIds();
-  stored[project.id] = ids;
-  await AsyncStorage.setItem(REMINDER_IDS_KEY, JSON.stringify(stored));
   return true;
+}
+
+// Serialized cancellation/scheduling protects the legacy per-project ID record.
+export function scheduleProjectReminders(project: Project, tasks: ProjectTask[], askForPermission = true) {
+  return serialized(() => schedule(project, tasks, askForPermission));
+}
+export function syncProjectReminders(projects: Project[], tasks: ProjectTask[], enabled: boolean) {
+  masterEnabled = enabled;
+  return serialized(async () => {
+    if (Platform.OS === 'web') return;
+    const stored = await readReminderIds();
+    for (const id of Object.keys(stored)) {
+      if (!masterEnabled || !projects.some((project) => project.id === id && project.remindersEnabled)) await cancelProjectReminders(id);
+    }
+    if (!masterEnabled) return;
+    for (const project of projects) if (project.remindersEnabled) await schedule(project, tasks, false);
+  });
 }

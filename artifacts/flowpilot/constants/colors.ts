@@ -14,6 +14,7 @@
 
 const colors = {
   light: {
+    panel: '#15213D', action: '#F26B5E', dangerAction: '#ef4444',
     // Legacy aliases (kept for backward compatibility)
     text: '#15213D',
     tint: '#F26B5E',
@@ -53,6 +54,13 @@ const colors = {
 
   // Border radius (in px). Sync from the sibling web artifact's --radius
   // CSS variable. This value applies to cards, buttons, inputs, and modals.
+  dark: {
+    panel: '#15213D', action: '#B94337', dangerAction: '#B83243', text: '#EDF1FA', tint: '#FF9385', background: '#101724', foreground: '#EDF1FA',
+    card: '#1C2637', cardForeground: '#EDF1FA', primary: '#FF9385', primaryForeground: '#FFFFFF',
+    secondary: '#2B374C', secondaryForeground: '#DEE6F5', muted: '#253044', mutedForeground: '#B2BDD0',
+    accent: '#4B302F', accentForeground: '#FFC2B8', destructive: '#FF8D94', destructiveForeground: '#FFFFFF',
+    border: '#3B485E', input: '#596780',
+  },
   radius: 16,
 };
 

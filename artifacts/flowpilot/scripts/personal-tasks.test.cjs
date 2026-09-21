@@ -276,7 +276,10 @@ function uiHost(file, flow, params = {}) {
   const state = []; let cursor = 0;
   const navigation = [];
   const module = loadSource(file, {
-    react: { useState: (initial) => {
+    react: { useRef: (initial) => {
+      const index = cursor++; if (!(index in state)) state[index] = { current: initial };
+      return state[index];
+    }, useState: (initial) => {
       const index = cursor++; if (!(index in state)) state[index] = typeof initial === 'function' ? initial() : initial;
       return [state[index], (value) => { state[index] = typeof value === 'function' ? value(state[index]) : value; }];
     } },

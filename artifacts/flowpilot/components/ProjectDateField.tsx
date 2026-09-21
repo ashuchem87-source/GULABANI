@@ -1,3 +1,4 @@
+import { useSettings, useDateFormatter } from '@/context/SettingsContext';
 import { Feather } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
@@ -8,11 +9,15 @@ import { localDateValue, parseTaskDate } from '@/lib/task-utils';
 // Calendar UI uses only existing React Native components; no native module needed.
 export function ProjectDateField({ value, onChange, label = 'PROJECT START DATE / ALLOCATION DATE', optional = false }: { value: string; onChange: (date: string) => void; label?: string; optional?: boolean }) {
   const colors = useColors();
+  const { settings } = useSettings();
+  const formatDate = useDateFormatter();
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState(() => parseTaskDate(value) ?? new Date());
   const first = new Date(month.getFullYear(), month.getMonth(), 1);
   const count = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-  const cells = Array.from({ length: Math.ceil((first.getDay() + count) / 7) * 7 }, (_, index) => index - first.getDay() + 1);
+  const offset = (first.getDay() + (settings.firstDayOfWeek === 'Monday' ? 6 : 0)) % 7;
+  const weekdays = settings.firstDayOfWeek === 'Monday' ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const cells = Array.from({ length: Math.ceil((offset + count) / 7) * 7 }, (_, index) => index - offset + 1);
   const choose = (date: Date) => { onChange(localDateValue(date)); setOpen(false); };
   const shiftMonth = (amount: number) => setMonth((current) => new Date(current.getFullYear(), current.getMonth() + amount, 1));
   return <View style={{ gap: 7 }}>
@@ -22,7 +27,7 @@ export function ProjectDateField({ value, onChange, label = 'PROJECT START DATE 
       <Pressable testID="open-project-calendar" accessibilityRole="button" accessibilityLabel={`Choose ${label.toLowerCase()}`} onPress={() => { setMonth(parseTaskDate(value) ?? new Date()); setOpen(true); }} style={styles.icon}><Feather name="calendar" size={20} color={colors.primary} /></Pressable>
     </View>
     {optional && <Pressable accessibilityRole="button" onPress={() => onChange('')} style={styles.action}><AppText style={{ color: colors.primary }}>No due date</AppText></Pressable>}
-    <AppText style={[styles.hint, { color: parseTaskDate(value) || (optional && !value) ? colors.mutedForeground : colors.destructive }]}>{optional && !value ? 'No due date selected.' : parseTaskDate(value) ? 'Choose a date or enter YYYY-MM-DD. Past and future dates are allowed.' : 'Enter a valid date as YYYY-MM-DD.'}</AppText>
+    <AppText style={[styles.hint, { color: parseTaskDate(value) || (optional && !value) ? colors.mutedForeground : colors.destructive }]}>{optional && !value ? 'No due date selected.' : parseTaskDate(value) ? `${formatDate(value)} · Enter YYYY-MM-DD or choose a date.` : 'Enter a valid date as YYYY-MM-DD.'}</AppText>
     <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
       <View style={styles.overlay}><View accessibilityViewIsModal style={[styles.dialog, { backgroundColor: colors.card }]}>
         <AppText style={styles.title}>{optional ? 'Due date' : 'Project start date'}</AppText>
@@ -31,13 +36,13 @@ export function ProjectDateField({ value, onChange, label = 'PROJECT START DATE 
           <AppText accessibilityLiveRegion="polite" style={styles.month}>{new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' }).format(first)}</AppText>
           <Pressable accessibilityLabel="Next month" accessibilityRole="button" onPress={() => shiftMonth(1)} style={styles.icon}><Feather name="chevron-right" size={22} color={colors.primary} /></Pressable>
         </View>
-        <View style={styles.grid}>{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => <View key={day} style={styles.weekday}><AppText style={[styles.hint, { color: colors.mutedForeground }]}>{day}</AppText></View>)}</View>
+        <View style={styles.grid}>{weekdays.map((day) => <View key={day} style={styles.weekday}><AppText style={[styles.hint, { color: colors.mutedForeground }]}>{day}</AppText></View>)}</View>
         <View style={styles.grid}>{cells.map((day, index) => {
           if (day < 1 || day > count) return <View key={index} style={styles.cell} />;
           const date = new Date(first.getFullYear(), first.getMonth(), day);
           const dateValue = localDateValue(date);
           const selected = dateValue === value;
-          return <Pressable key={index} testID={`calendar-${dateValue}`} accessibilityRole="button" accessibilityLabel={dateValue} accessibilityState={{ selected }} onPress={() => choose(date)} style={[styles.cell, { backgroundColor: selected ? colors.primary : 'transparent' }]}><AppText style={{ color: selected ? '#FFFFFF' : colors.foreground }}>{day}</AppText></Pressable>;
+          return <Pressable key={index} testID={`calendar-${dateValue}`} accessibilityRole="button" accessibilityLabel={dateValue} accessibilityState={{ selected }} onPress={() => choose(date)} style={[styles.cell, { backgroundColor: selected ? colors.action : 'transparent' }]}><AppText style={{ color: selected ? '#FFFFFF' : colors.foreground }}>{day}</AppText></Pressable>;
         })}</View>
         <View style={styles.footer}><Pressable accessibilityRole="button" onPress={() => choose(new Date())} style={styles.action}><AppText style={{ color: colors.primary }}>Today</AppText></Pressable><Pressable accessibilityRole="button" onPress={() => setOpen(false)} style={styles.action}><AppText>Cancel</AppText></Pressable></View>
       </View></View>

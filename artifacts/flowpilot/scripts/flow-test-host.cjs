@@ -16,6 +16,8 @@ function loadSource(file, mocks = {}, globals = {}) {
       const jsx = (type, props) => ({ type, props });
       return { jsx, jsxs: jsx, Fragment: 'Fragment' };
     }
+    if (name === '@/lib/settings') return loadSource('lib/settings.ts');
+    if (name === '@/context/SettingsContext') { const model = loadSource('lib/settings.ts'); return { useSettings: () => ({ settings: model.DEFAULT_SETTINGS }), useDateFormatter: () => (date) => model.formatDate(date, model.DEFAULT_SETTINGS.dateFormat) }; }
     if (name === '@/lib/task-utils') return loadSource('lib/task-utils.ts');
     if (name === '@/lib/personal-tasks') return loadSource('lib/personal-tasks.ts');
     throw new Error(`Missing test mock: ${name}`);
@@ -52,7 +54,7 @@ function host(storage, { mocks = {}, globals = {} } = {}) {
       getItem: async () => storage.value ?? null,
       setItem: async (key, value) => { assert.equal(key, 'flowpilot-state-v1'); storage.value = value; },
     },
-    '@/lib/notifications': { scheduleProjectReminders: async () => true },
+    '@/lib/notifications': { scheduleProjectReminders: async () => true, syncProjectReminders: async () => undefined },
     '@/lib/personal-notifications': { askPersonalReminderPermission: async () => undefined, syncPersonalReminders: async () => undefined },
     ...mocks,
   }, { setTimeout: () => 0, clearTimeout: () => {}, ...globals });

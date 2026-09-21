@@ -37,7 +37,7 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      <View style={[styles.hero, { backgroundColor: colors.foreground }]}>
+      <View style={[styles.hero, { backgroundColor: colors.panel }]}>
         <View style={styles.heroTop}>
           <View style={styles.nextLabel}><View style={[styles.liveDot, { backgroundColor: colors.primary }]} /><AppText style={[styles.heroLabel, { color: '#D6DCE8' }]}>YOUR NEXT STEP</AppText></View>
           <Feather name="arrow-up-right" size={20} color="#B7C1D4" />
@@ -48,7 +48,7 @@ export default function HomeScreen() {
             <AppText style={styles.heroProject}>{projects.find((project) => project.id === nextTask.projectId)?.name ?? 'Project'}</AppText>
             <View style={styles.heroBottom}>
               <AppText style={[styles.heroDue, { color: daysRemaining(nextTask.dueDate) <= 1 ? '#FFB6A9' : '#D6DCE8' }]}>{daysRemaining(nextTask.dueDate) <= 0 ? 'Needs attention today' : `${daysRemaining(nextTask.dueDate)} days remaining`}</AppText>
-              <Pressable onPress={() => router.push('/tasks')} style={({ pressed }) => [styles.openButton, { backgroundColor: colors.primary, opacity: pressed ? 0.75 : 1 }]}><AppText style={styles.openButtonText}>Open task</AppText><Feather name="arrow-right" size={14} color={colors.primaryForeground} /></Pressable>
+              <Pressable onPress={() => router.push('/tasks')} style={({ pressed }) => [styles.openButton, { backgroundColor: colors.action, opacity: pressed ? 0.75 : 1 }]}><AppText style={styles.openButtonText}>Open task</AppText><Feather name="arrow-right" size={14} color={colors.primaryForeground} /></Pressable>
             </View>
           </>
         ) : <AppText style={styles.heroTitle}>You’re all caught up.</AppText>}

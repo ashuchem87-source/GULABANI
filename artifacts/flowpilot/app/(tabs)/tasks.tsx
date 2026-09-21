@@ -1,3 +1,5 @@
+import { useSettings } from '@/context/SettingsContext';
+import { todoEmptyMessage } from '@/lib/settings';
 import { Feather } from '@expo/vector-icons';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useState } from 'react';
@@ -12,10 +14,11 @@ import { todoEntries, type TodoEntry, type TodoFilter } from '@/lib/personal-tas
 
 export default function TasksScreen() {
   const colors = useColors();
+  const { settings } = useSettings();
   const insets = useSafeAreaInsets();
   const { tasks, personalTasks, personalReminderNotice } = useFlow();
   const [filter, setFilter] = useState<TodoFilter>('All');
-  const entries = todoEntries(tasks, personalTasks, filter);
+  const entries = todoEntries(tasks, personalTasks, filter, settings);
   const openTasks = entries.filter((entry) => entry.task.status === 'todo');
   const doneTasks = entries.filter((entry) => entry.task.status === 'done');
   const row = (entry: TodoEntry) => entry.kind === 'personal'
@@ -23,13 +26,13 @@ export default function TasksScreen() {
     : <TaskRow key={`${entry.task.projectId}:${entry.task.id}`} task={entry.task} />;
   return (
     <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={[styles.content, { paddingTop: Platform.OS === 'web' ? 67 : insets.top + 18, paddingBottom: insets.bottom + 90 }]} showsVerticalScrollIndicator={false}>
-      <View style={styles.header}><View><AppText style={[styles.kicker, { color: colors.primary }]}>THE DAILY LIST</AppText><AppText style={styles.title}>To-do</AppText><AppText style={[styles.subtitle, { color: colors.mutedForeground }]}>One next action at a time.</AppText></View><View style={[styles.count, { backgroundColor: colors.foreground }]}><AppText style={[styles.countNumber, { color: colors.background }]}>{openTasks.length}</AppText><AppText style={[styles.countLabel, { color: '#B7C1D4' }]}>open</AppText></View></View>
-      <Pressable testID="add-personal-todo" accessibilityRole="button" onPress={() => router.push('/personal-task')} style={[styles.addTodo, { backgroundColor: colors.primary }]}><Feather name="plus" size={18} color="#FFFFFF" /><AppText style={styles.addText}>Add To-do</AppText></Pressable>
+      <View style={styles.header}><View><AppText style={[styles.kicker, { color: colors.primary }]}>THE DAILY LIST</AppText><AppText style={styles.title}>To-do</AppText><AppText style={[styles.subtitle, { color: colors.mutedForeground }]}>One next action at a time.</AppText></View><View style={[styles.count, { backgroundColor: colors.foreground }]}><AppText style={[styles.countNumber, { color: colors.background }]}>{openTasks.length}</AppText><AppText style={[styles.countLabel, { color: colors.background }]}>open</AppText></View></View>
+      <Pressable testID="add-personal-todo" accessibilityRole="button" onPress={() => router.push('/personal-task')} style={[styles.addTodo, { backgroundColor: colors.action }]}><Feather name="plus" size={18} color="#FFFFFF" /><AppText style={styles.addText}>Add To-do</AppText></Pressable>
       <View style={styles.filters}>{(['All', 'Personal', 'Projects'] as const).map((value) => <Pressable testID={`todo-filter-${value}`} key={value} accessibilityRole="button" accessibilityState={{ selected: filter === value }} onPress={() => setFilter(value)} style={[styles.filter, { backgroundColor: filter === value ? colors.foreground : colors.card, borderColor: colors.border }]}><AppText style={{ color: filter === value ? colors.background : colors.foreground }}>{value}</AppText></Pressable>)}</View>
       {!!personalReminderNotice && <AppText accessibilityRole="alert" style={[styles.note, { color: colors.primary }]}>{personalReminderNotice}</AppText>}
       <View style={[styles.callout, { backgroundColor: colors.accent }]}><Feather name="bell" size={16} color={colors.accentForeground} /><AppText style={[styles.calloutText, { color: colors.accentForeground }]}>Your list is sorted by what needs attention first.</AppText></View>
       <AppText style={[styles.groupTitle, { color: colors.mutedForeground }]}>UP NEXT</AppText>
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>{openTasks.length ? openTasks.map(row) : <AppText style={[styles.empty, { color: colors.mutedForeground }]}>Your work is clear for now.</AppText>}</View>
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>{openTasks.length ? openTasks.map(row) : <AppText style={[styles.empty, { color: colors.mutedForeground }]}>{todoEmptyMessage(settings, filter)}</AppText>}</View>
       {doneTasks.length ? <><AppText style={[styles.groupTitle, { color: colors.mutedForeground, marginTop: 19 }]}>COMPLETED</AppText><View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>{doneTasks.map(row)}</View></> : null}
       {openTasks.some(({ task }) => task.dueDate && daysRemaining(task.dueDate) < 0) ? <AppText style={[styles.note, { color: colors.primary }]}>A few tasks are past their suggested date. Finish one small thing next.</AppText> : null}
     </ScrollView>

@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { requestReminderPermission } from '@/lib/notifications';
 import { personalReminderAt, type PersonalTask } from '@/lib/personal-tasks';
 
+let masterEnabled = true;
 const PREFIX = 'gulabani-personal-';
 let queue: Promise<unknown> = Promise.resolve();
 
@@ -12,15 +13,16 @@ export async function askPersonalReminderPermission(): Promise<string | undefine
 }
 
 // Reconcile only our own deterministic IDs. Serializing prevents edit/complete/delete races.
-export function syncPersonalReminders(tasks: PersonalTask[]): Promise<string | undefined> {
+export function syncPersonalReminders(tasks: PersonalTask[], enabled = true): Promise<string | undefined> {
+  masterEnabled = enabled;
   const run = queue.catch(() => undefined).then(async () => {
-    if (Platform.OS === 'web') return tasks.some((task) => task.status === 'todo' && task.reminder !== 'None') ? 'Personal reminders are only available in the mobile app.' : undefined;
+    if (Platform.OS === 'web') return masterEnabled && tasks.some((task) => task.status === 'todo' && task.reminder !== 'None') ? 'Personal reminders are only available in the mobile app.' : undefined;
     const existing = (await Notifications.getAllScheduledNotificationsAsync()).filter((item) => item.identifier.startsWith(PREFIX));
-    const allowed = (await Notifications.getPermissionsAsync()).granted;
+    const allowed = masterEnabled && (await Notifications.getPermissionsAsync()).granted;
     const desired = new Map<string, { task: PersonalTask; date: Date; signature: string }>();
     let unscheduled = false;
     for (const task of tasks) {
-      if (task.status !== 'todo' || task.reminder === 'None') continue;
+      if (!masterEnabled || task.status !== 'todo' || task.reminder === 'None') continue;
       const date = personalReminderAt(task);
       if (!date || date.getTime() <= Date.now()) { unscheduled = true; continue; }
       if (!allowed) { unscheduled = true; continue; }
@@ -32,6 +34,7 @@ export function syncPersonalReminders(tasks: PersonalTask[]): Promise<string | u
       else desired.delete(item.identifier);
     }
     for (const [identifier, { task, date, signature }] of desired) {
+      if (!masterEnabled) break;
       await Notifications.scheduleNotificationAsync({ identifier,
         content: { title: 'GULABANI · Personal', body: task.title, data: { personalTaskId: task.id, personalSignature: signature } },
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date },

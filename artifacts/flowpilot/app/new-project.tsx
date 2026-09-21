@@ -1,3 +1,4 @@
+import { useSettings } from '@/context/SettingsContext';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -12,6 +13,7 @@ import { addCalendarDays, localDateValue, parseTaskDate } from '@/lib/task-utils
 
 export default function NewProjectScreen() {
   const colors = useColors();
+  const { settings } = useSettings();
   const insets = useSafeAreaInsets();
   const { templates, addProject } = useFlow();
   const params = useLocalSearchParams<{ templateId?: string }>();
@@ -19,7 +21,7 @@ export default function NewProjectScreen() {
   const [client, setClient] = useState('');
   const [summary, setSummary] = useState('');
   const [templateId, setTemplateId] = useState(params.templateId ?? templates[0]?.id);
-  const [days, setDays] = useState('10');
+  const [days, setDays] = useState(() => String(settings.projectDuration));
   const [startDate, setStartDate] = useState(() => localDateValue());
   const [frequency, setFrequency] = useState<ReminderFrequency>('Daily');
   const selectedTemplate = useMemo(() => templates.find((template) => template.id === templateId) ?? templates[0], [templateId, templates]);
@@ -51,7 +53,7 @@ export default function NewProjectScreen() {
         <View style={styles.inlineFields}><View style={{ flex: 1 }}><AppText style={styles.label}>DEADLINE IN</AppText><View style={[styles.input, { borderColor: colors.input, backgroundColor: colors.card }]}><TextInput value={days} onChangeText={setDays} keyboardType="number-pad" style={[styles.inputText, { color: colors.foreground }]} /><AppText style={[styles.suffix, { color: colors.mutedForeground }]}>days</AppText></View></View><View style={{ flex: 1.3 }}><AppText style={styles.label}>REMIND ME</AppText><View style={styles.frequencyRow}>{(['Daily', 'Every 2 days', 'Weekly'] as ReminderFrequency[]).map((item) => <Pressable key={item} onPress={() => setFrequency(item)} style={[styles.frequency, { backgroundColor: frequency === item ? colors.foreground : colors.card, borderColor: frequency === item ? colors.foreground : colors.border }]}><AppText style={[styles.frequencyText, { color: frequency === item ? colors.background : colors.foreground }]}>{item === 'Every 2 days' ? '2d' : item === 'Daily' ? '1d' : '7d'}</AppText></Pressable>)}</View></View></View>
         <AppText style={[styles.previewText, { color: colors.mutedForeground }]}>The project deadline is this many calendar days after the start date. Workflow step durations run in sequence from that same start date.</AppText>
         <View style={[styles.preview, { backgroundColor: colors.secondary }]}><Feather name="zap" size={16} color={colors.primary} /><View style={{ flex: 1 }}><AppText style={styles.previewTitle}>{selectedTemplate ? `${selectedTemplate.name} is ready` : 'Create a template first'}</AppText><AppText style={[styles.previewText, { color: colors.mutedForeground }]}>{selectedTemplate ? `${selectedTemplate.steps.length} steps will be assigned automatically, starting with “${selectedTemplate.steps[0]?.title ?? ''}”.` : 'Add a template in the Templates tab before creating a project.'}</AppText></View></View>
-        <Pressable testID="save-project" disabled={!canSave} onPress={save} style={({ pressed }) => [styles.save, { backgroundColor: canSave ? colors.primary : colors.input, opacity: pressed ? 0.78 : 1 }]}><AppText style={styles.saveText}>Create project</AppText><Feather name="arrow-right" size={17} color="#FFFFFF" /></Pressable>
+        <Pressable testID="save-project" disabled={!canSave} onPress={save} style={({ pressed }) => [styles.save, { backgroundColor: canSave ? colors.action : colors.input, opacity: pressed ? 0.78 : 1 }]}><AppText style={styles.saveText}>Create project</AppText><Feather name="arrow-right" size={17} color="#FFFFFF" /></Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );

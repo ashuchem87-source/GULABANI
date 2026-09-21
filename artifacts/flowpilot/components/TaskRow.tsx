@@ -1,12 +1,14 @@
+import { useDateFormatter } from '@/context/SettingsContext';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { AppText } from '@/components/AppText';
-import { ProjectTask, daysRemaining, formatShortDate, useFlow } from '@/context/FlowContext';
+import { ProjectTask, daysRemaining, useFlow } from '@/context/FlowContext';
 import { useColors } from '@/hooks/useColors';
 
 export function TaskRow({ task, compact = false }: { task: ProjectTask; compact?: boolean }) {
   const colors = useColors();
+  const formatShortDate = useDateFormatter();
   const { toggleTask, projects } = useFlow();
   const project = projects.find((item) => item.id === task.projectId);
   const remaining = daysRemaining(task.dueDate);
@@ -22,7 +24,7 @@ export function TaskRow({ task, compact = false }: { task: ProjectTask; compact?
       }}
       style={({ pressed }) => [styles.row, compact && styles.compact, { borderBottomColor: colors.border, opacity: pressed ? 0.7 : 1 }]}
     >
-      <View style={[styles.checkbox, { borderColor: isDone ? colors.primary : colors.input, backgroundColor: isDone ? colors.primary : 'transparent' }]}>
+      <View style={[styles.checkbox, { borderColor: isDone ? colors.primary : colors.input, backgroundColor: isDone ? colors.action : 'transparent' }]}>
         {isDone ? <Feather name="check" size={14} color={colors.primaryForeground} /> : null}
       </View>
       <View style={styles.copy}>
