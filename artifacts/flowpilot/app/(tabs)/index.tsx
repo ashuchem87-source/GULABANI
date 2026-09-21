@@ -1,3 +1,4 @@
+import { normalProjectTasks } from '@/lib/project-management';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
@@ -17,8 +18,8 @@ export default function HomeScreen() {
   const { projects, tasks, personalTasks, calendarDate, hydrated } = useFlow();
   const { settings } = useSettings();
   const formatDate = useDateFormatter();
-  const groups = useMemo(() => dashboardGroups(tasks, personalTasks, calendarDate, settings),
-    [tasks, personalTasks, calendarDate, settings.showPersonal, settings.showProjects, settings.showCompleted]);
+  const groups = useMemo(() => dashboardGroups(normalProjectTasks(tasks, projects), personalTasks, calendarDate, settings),
+    [tasks, projects, personalTasks, calendarDate, settings.showPersonal, settings.showProjects, settings.showCompleted]);
   const counts = dashboardCounts(groups);
   const projectNames = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
   const summaries: { key: DashboardBucket; label: string }[] = [

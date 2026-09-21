@@ -1,3 +1,4 @@
+import { availableProjects } from '@/lib/project-management';
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { router, type Href } from 'expo-router';
@@ -8,7 +9,8 @@ import { useColors } from '@/hooks/useColors';
 
 export function QuickAdd() {
   const colors = useColors();
-  const { projects, hydrated } = useFlow();
+  const { projects: allProjects, hydrated } = useFlow();
+  const projects = availableProjects(allProjects);
   const [page, setPage] = useState<'menu' | 'projects' | null>(null);
   const navigate = (route: Href) => { setPage(null); router.push(route); };
   const option = (id: string, label: string, onPress: () => void) => <Pressable key={id} testID={id} accessibilityRole="button" onPress={onPress} style={[styles.option, { borderBottomColor: colors.border }]}><AppText style={{ flex: 1 }}>{label}</AppText><Feather name="chevron-right" size={18} color={colors.primary} /></Pressable>;

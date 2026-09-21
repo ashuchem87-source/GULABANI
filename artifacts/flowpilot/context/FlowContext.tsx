@@ -1,3 +1,4 @@
+import { PROJECT_STATUSES, projectProgress, projectStatus, transitionProject, isArchived, type ProjectStatus } from '@/lib/project-management';
 import { useSettings } from '@/context/SettingsContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -27,6 +28,8 @@ export type WorkflowTemplate = {
 };
 
 export type Project = {
+  status?: ProjectStatus;
+  archived?: boolean;
   id: string;
   name: string;
   client: string;
@@ -82,6 +85,8 @@ type FlowContextValue = {
   updateReminderFrequency: (projectId: string, frequency: ReminderFrequency) => void;
   enableProjectReminders: (projectId: string) => Promise<boolean>;
   deleteProject: (projectId: string) => void;
+  setProjectStatus: (projectId: string, status: ProjectStatus, confirmIncomplete?: boolean) => boolean;
+  setProjectArchived: (projectId: string, archived: boolean, confirmed?: boolean) => boolean;
 };
 
 const templates: WorkflowTemplate[] = [
@@ -357,6 +362,13 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
     setTemplateList((current) => current.filter((template) => template.id !== id));
   };
 
+  // Keep task/status/archive decisions consistent across actions in the same render batch.
+  const commitProjectState = (nextProjects: Project[], nextTasks = projectSnapshot.current.tasks) => {
+    projectSnapshot.current = { projects: nextProjects, tasks: nextTasks };
+    setProjects(nextProjects);
+    setTasks(nextTasks);
+  };
+
   const addProject = async (input: {
     name: string;
     client: string;
@@ -380,20 +392,21 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
       dueDate: input.dueDate,
       reminderFrequency: input.reminderFrequency,
       remindersEnabled: true,
+      status: 'Active',
     };
     const template = templateList.find((item) => item.id === input.templateId);
     if (!template || !template.steps.length) return false;
     const newTasks = makeTasks(project, template);
-    setProjects((current) => [project, ...current]);
-    setTasks((current) => [...newTasks, ...current]);
+    commitProjectState([project, ...projectSnapshot.current.projects], [...newTasks, ...projectSnapshot.current.tasks]);
     if (settings.notificationsEnabled) await scheduleProjectReminders(project, newTasks);
     return true;
   };
 
   const addManualTask: FlowContextValue['addManualTask'] = (projectId, input) => {
+    const { projects, tasks } = projectSnapshot.current;
     const project = projects.find((item) => item.id === projectId);
     const dueDate = parseTaskDate(input.dueDate);
-    if (!hydrated || !project || !input.title.trim() || !dueDate) return false;
+    if (!hydrated || !project || isArchived(project) || !input.title.trim() || !dueDate) return false;
     const task: ProjectTask = {
       id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
       projectId, title: input.title.trim(), description: '', duration: 0,
@@ -401,26 +414,27 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
       order: tasks.filter((item) => item.projectId === projectId).reduce((max, item) => Math.max(max, item.order), -1) + 1,
       isManual: true,
     };
-    setTasks((current) => [...current, {
-      ...task, order: current.filter((item) => item.projectId === projectId)
-        .reduce((max, item) => Math.max(max, item.order), -1) + 1,
-    }]);
-    if (project.remindersEnabled) void scheduleProjectReminders(project, [...tasks, task], false);
+    const nextTasks = [...tasks, task];
+    const updatedProject = transitionProject(project, tasks, nextTasks, 'add');
+    commitProjectState(projects.map((item) => item.id === project.id ? updatedProject : item), nextTasks);
+    if (project.remindersEnabled) void scheduleProjectReminders(updatedProject, [...tasks, task], false);
     return true;
   };
 
   const toggleTask = (taskId: string, projectId?: string) => {
+    const { projects, tasks } = projectSnapshot.current;
     const task = tasks.find((item) => item.id === taskId && (!projectId || item.projectId === projectId));
     const project = task ? projects.find((item) => item.id === task.projectId) : undefined;
-    if (!task || !project) return;
+    if (!hydrated || !task || !project) return;
 
     if (task.isManual) {
       const nextTasks = tasks.map((item) => item.projectId === project.id && item.id === task.id ? {
         ...item, status: task.status === 'done' ? 'todo' as const : 'done' as const,
         completedAt: task.status === 'done' ? undefined : new Date().toISOString(),
       } : item);
-      setTasks(nextTasks);
-      if (project.remindersEnabled) void scheduleProjectReminders(project, nextTasks, false);
+      const updatedProject = transitionProject(project, tasks, nextTasks, task.status === 'done' ? 'reopen' : 'complete');
+      commitProjectState(projects.map((item) => item.id === project.id ? updatedProject : item), nextTasks);
+      if (project.remindersEnabled) void scheduleProjectReminders(updatedProject, nextTasks, false);
       return;
     }
 
@@ -436,36 +450,61 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
       return item;
     });
     const recalculated = recalculateTimeline(project, nextTasks.filter((item) => item.projectId === project.id));
-    const updatedProject = recalculated.project;
-    setProjects((current) => current.map((item) => (item.id === project.id ? updatedProject : item)));
-    setTasks((current) => current.map((item) => (item.projectId === project.id ? recalculated.tasks.find((nextTask) => nextTask.id === item.id) ?? item : item)));
+    const transitioned = transitionProject(project, tasks, recalculated.tasks, reopening ? 'reopen' : 'complete');
+    const updatedProject = { ...recalculated.project, ...(transitioned.status ? { status: transitioned.status } : {}) };
+    commitProjectState(projects.map((item) => item.id === project.id ? updatedProject : item),
+      tasks.map((item) => item.projectId === project.id ? recalculated.tasks.find((nextTask) => nextTask.id === item.id) ?? item : item));
     if (updatedProject.remindersEnabled) void scheduleProjectReminders(updatedProject, recalculated.tasks, false);
   };
 
   const updateReminderFrequency = (projectId: string, frequency: ReminderFrequency) => {
+    const { projects, tasks } = projectSnapshot.current;
     const project = projects.find((item) => item.id === projectId);
     if (!project) return;
     const updatedProject = { ...project, reminderFrequency: frequency };
-    setProjects((current) => current.map((item) => (item.id === projectId ? updatedProject : item)));
+    commitProjectState(projects.map((item) => item.id === projectId ? updatedProject : item));
     if (updatedProject.remindersEnabled) void scheduleProjectReminders(updatedProject, tasks, false);
   };
 
   const enableProjectReminders = async (projectId: string) => {
+    const { projects, tasks } = projectSnapshot.current;
     const project = projects.find((item) => item.id === projectId);
-    if (!project) return false;
+    if (!project || isArchived(project)) return false;
     const enabledProject = { ...project, remindersEnabled: true };
-    setProjects((current) => current.map((item) => (item.id === projectId ? enabledProject : item)));
+    commitProjectState(projects.map((item) => item.id === projectId ? enabledProject : item));
     return settings.notificationsEnabled ? scheduleProjectReminders(enabledProject, tasks) : false;
   };
 
+  const setProjectStatus: FlowContextValue['setProjectStatus'] = (projectId, status, confirmIncomplete = false) => {
+    const { projects, tasks } = projectSnapshot.current;
+    const project = projects.find((item) => item.id === projectId);
+    if (!hydrated || !project || !PROJECT_STATUSES.includes(status)) return false;
+    if (status === 'Completed' && projectProgress(projectId, tasks).incomplete > 0 && !confirmIncomplete) return false;
+    commitProjectState(projects.map((item) => item.id === projectId ? { ...item, status } : item));
+    return true;
+  };
+
+  const setProjectArchived: FlowContextValue['setProjectArchived'] = (projectId, archived, confirmed = false) => {
+    const { projects, tasks } = projectSnapshot.current;
+    const project = projects.find((item) => item.id === projectId);
+    if (!hydrated || !project || (archived && !confirmed)) return false;
+    // Freeze a legacy derived status so task actions while archived cannot change it implicitly.
+    const updated = { ...project, archived, status: projectStatus(project, tasks) };
+    const next = projects.map((item) => item.id === projectId ? updated : item);
+    commitProjectState(next);
+    void syncProjectReminders(next, tasks, settings.notificationsEnabled)
+      .catch(() => setPersonalReminderNotice('Project reminders could not be updated. Reopen the app to retry.'));
+    return true;
+  };
+
   const deleteProject = (projectId: string) => {
+    const { projects, tasks } = projectSnapshot.current;
     void syncProjectReminders(projects.filter((project) => project.id !== projectId), tasks, settings.notificationsEnabled).catch(() => setPersonalReminderNotice('Project reminders could not be updated. Reopen the app to retry.'));
-    setProjects((current) => current.filter((project) => project.id !== projectId));
-    setTasks((current) => current.filter((task) => task.projectId !== projectId));
+    commitProjectState(projects.filter((project) => project.id !== projectId), tasks.filter((task) => task.projectId !== projectId));
   };
 
   const value = useMemo(
-    () => ({ projects, tasks, templates: templateList, hydrated, calendarDate, personalTasks, personalReminderNotice, savePersonalTask, completePersonalTask, reopenPersonalTask, deletePersonalTask, addTemplate, updateTemplate, deleteTemplate, addProject, addManualTask, toggleTask, updateReminderFrequency, enableProjectReminders, deleteProject }),
+    () => ({ projects, tasks, templates: templateList, hydrated, calendarDate, personalTasks, personalReminderNotice, savePersonalTask, completePersonalTask, reopenPersonalTask, deletePersonalTask, addTemplate, updateTemplate, deleteTemplate, addProject, addManualTask, toggleTask, updateReminderFrequency, enableProjectReminders, deleteProject, setProjectStatus, setProjectArchived }),
     [projects, tasks, templateList, hydrated, calendarDate, personalTasks, personalReminderNotice, settings.notificationsEnabled],
   );
 

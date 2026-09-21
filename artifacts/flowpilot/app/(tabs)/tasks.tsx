@@ -1,3 +1,4 @@
+import { normalProjectTasks } from '@/lib/project-management';
 import { useSettings } from '@/context/SettingsContext';
 import { todoEmptyMessage } from '@/lib/settings';
 import { Feather } from '@expo/vector-icons';
@@ -16,9 +17,9 @@ export default function TasksScreen() {
   const colors = useColors();
   const { settings } = useSettings();
   const insets = useSafeAreaInsets();
-  const { tasks, personalTasks, personalReminderNotice } = useFlow();
+  const { projects, tasks, personalTasks, personalReminderNotice } = useFlow();
   const [filter, setFilter] = useState<TodoFilter>('All');
-  const entries = todoEntries(tasks, personalTasks, filter, settings);
+  const entries = todoEntries(normalProjectTasks(tasks, projects), personalTasks, filter, settings);
   const openTasks = entries.filter((entry) => entry.task.status === 'todo');
   const doneTasks = entries.filter((entry) => entry.task.status === 'done');
   const row = (entry: TodoEntry) => entry.kind === 'personal'

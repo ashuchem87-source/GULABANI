@@ -16,6 +16,9 @@ function loadSource(file, mocks = {}, globals = {}) {
       const jsx = (type, props) => ({ type, props });
       return { jsx, jsxs: jsx, Fragment: 'Fragment' };
     }
+    if (name === '@/lib/project-management') return loadSource('lib/project-management.ts');
+    if (name === '@/components/ProjectManagement') return { ProjectManagement: 'ProjectManagement' };
+    if (name === '@/components/ProjectProgress') return { ProjectProgress: 'ProjectProgress' };
     if (name === '@/lib/dashboard') return loadSource('lib/dashboard.ts');
     if (name === '@/lib/settings') return loadSource('lib/settings.ts');
     if (name === '@/context/SettingsContext') { const model = loadSource('lib/settings.ts'); return { useSettings: () => ({ settings: model.DEFAULT_SETTINGS }), useDateFormatter: () => (date) => model.formatDate(date, model.DEFAULT_SETTINGS.dateFormat) }; }

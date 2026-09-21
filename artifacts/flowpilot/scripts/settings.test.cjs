@@ -147,7 +147,7 @@ test('System Light Dark resolve correctly and all palette token names match',()=
 test('Settings renders all sections, config version/build and expandable Help',()=>{
   const h=ui('app/(tabs)/settings.tsx'); let tree=h.render(); const text=content(tree);
   for(const heading of ['General','Notifications','To-do Preferences','Project Preferences','Appearance','About GULABANI','Help','9.8.7','123']) assert.ok(text.includes(heading),heading);
-  assert.ok(text.includes('Saved for when project completion status becomes available'));
+  assert.ok(text.includes('Controls completed projects in the Active list'));
   const button=walk(tree,n=>n.type==='Pressable'&&content(n)==='Projects ')[0] ?? walk(tree,n=>n.type==='Pressable'&&content(n).trim()==='Projects')[0]; assert.ok(button); button.props.onPress(); tree=h.render(); assert.match(content(tree),/Create a project from a template/);
 });
 function notifications({ failAt } = {}) {

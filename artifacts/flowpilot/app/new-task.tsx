@@ -1,3 +1,4 @@
+import { isArchived } from '@/lib/project-management';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -17,7 +18,7 @@ export default function NewTaskScreen() {
   const [title, setTitle] = useState('');
   const [date, setDate] = useState('');
   const [error, setError] = useState('');
-  const canSave = hydrated && !!project && !!title.trim() && !!parseTaskDate(date);
+  const canSave = hydrated && !!project && !isArchived(project) && !!title.trim() && !!parseTaskDate(date);
 
   const save = () => {
     if (!canSave || !project) return;
@@ -25,6 +26,7 @@ export default function NewTaskScreen() {
     else setError('Unable to add this task. Check the project, name and due date.');
   };
 
+  if (project && isArchived(project)) return <View style={{ flex: 1, padding: 24, backgroundColor: colors.background, justifyContent: 'center', gap: 16 }}><AppText>This project is archived. Unarchive it before adding tasks.</AppText><Pressable accessibilityRole="button" accessibilityLabel="Open archived project" onPress={() => router.push({ pathname: '/project/[id]', params: { id: project.id } })} style={{ minHeight: 48, justifyContent: 'center' }}><AppText style={{ color: colors.primary }}>Open project</AppText></Pressable></View>;
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.content, { paddingTop: Platform.OS === 'web' ? 24 : insets.top + 14, paddingBottom: insets.bottom + 34 }]}>

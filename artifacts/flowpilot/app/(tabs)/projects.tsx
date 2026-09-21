@@ -1,3 +1,7 @@
+import { useState } from 'react';
+import { useSettings, useDateFormatter } from '@/context/SettingsContext';
+import { visibleProjects, projectStatus, projectHealth } from '@/lib/project-management';
+import { ProjectProgress } from '@/components/ProjectProgress';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -9,20 +13,25 @@ import { useColors } from '@/hooks/useColors';
 export default function ProjectsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { projects, tasks } = useFlow();
+  const { projects, tasks, calendarDate } = useFlow();
+  const { settings } = useSettings();
+  const formatDate = useDateFormatter();
+  const [archived, setArchived] = useState(false);
+  const visible = visibleProjects(projects, tasks, archived, settings.showCompletedProjects);
   return (
     <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={[styles.content, { paddingTop: Platform.OS === 'web' ? 67 : insets.top + 18, paddingBottom: insets.bottom + 90 }]} showsVerticalScrollIndicator={false}>
-      <View style={styles.header}><View><AppText style={[styles.kicker, { color: colors.primary }]}>WORKSPACE</AppText><AppText style={styles.title}>Projects</AppText><AppText style={[styles.subtitle, { color: colors.mutedForeground }]}>Every active flow, in one place.</AppText></View><Pressable onPress={() => router.push('/new-project')} style={[styles.add, { backgroundColor: colors.foreground }]}><Feather name="plus" size={20} color={colors.background} /></Pressable></View>
-      {projects.map((project) => {
-        const projectTasks = tasks.filter((task) => task.projectId === project.id);
-        const done = projectTasks.filter((task) => task.status === 'done').length;
+      <View style={styles.header}><View><AppText style={[styles.kicker, { color: colors.primary }]}>WORKSPACE</AppText><AppText style={styles.title}>Projects</AppText><AppText style={[styles.subtitle, { color: colors.mutedForeground }]}>Every active flow, in one place.</AppText></View><Pressable accessibilityRole="button" accessibilityLabel="New Project" onPress={() => router.push('/new-project')} style={[styles.add, { backgroundColor: colors.foreground }]}><Feather name="plus" size={20} color={colors.background} /></Pressable></View>
+      <View style={styles.filters}>{[false, true].map((value) => <Pressable key={String(value)} testID={value ? 'projects-archived' : 'projects-active'} accessibilityRole="button" accessibilityState={{ selected: archived === value }} onPress={() => setArchived(value)} style={[styles.filter, { borderColor: colors.border, backgroundColor: archived === value ? colors.foreground : colors.card }]}><AppText style={{ color: archived === value ? colors.background : colors.foreground }}>{value ? 'Archived' : 'Active'}</AppText></Pressable>)}</View>
+      {!visible.length && <AppText testID="projects-empty" style={{ color: colors.mutedForeground, paddingVertical: 18 }}>{archived ? 'No archived projects.' : projects.some((item) => !item.archived) && !settings.showCompletedProjects ? 'Completed projects are hidden in Settings. View archived projects above or create a new project.' : 'No active projects. Create a project or view Archived.'}</AppText>}
+      {visible.map((project) => {
         return (
-          <Pressable key={project.id} onPress={() => router.push({ pathname: '/project/[id]', params: { id: project.id } })} style={({ pressed }) => [styles.project, { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.76 : 1 }]}>
+          <Pressable key={project.id} testID={'project-card-' + project.id} accessibilityRole="button" onPress={() => router.push({ pathname: '/project/[id]', params: { id: project.id } })} style={({ pressed }) => [styles.project, { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.76 : 1 }]}>
             <View style={styles.row}><View style={[styles.dot, { backgroundColor: colors.primary }]} /><AppText style={styles.name}>{project.name}</AppText><Feather name="arrow-up-right" size={17} color={colors.mutedForeground} /></View>
             <AppText style={[styles.client, { color: colors.mutedForeground }]}>{project.client}</AppText>
             <AppText style={[styles.summary, { color: colors.mutedForeground }]} numberOfLines={2}>{project.summary}</AppText>
-            <View style={styles.progressLine}><View style={[styles.progressFill, { backgroundColor: colors.primary, width: `${projectTasks.length ? (done / projectTasks.length) * 100 : 0}%` }]} /></View>
-            <View style={styles.footer}><AppText style={[styles.meta, { color: colors.mutedForeground }]}>{done}/{projectTasks.length} steps</AppText><View style={[styles.deadline, { backgroundColor: daysRemaining(project.dueDate) <= 2 ? colors.accent : colors.secondary }]}><AppText style={[styles.deadlineText, { color: daysRemaining(project.dueDate) <= 2 ? colors.accentForeground : colors.secondaryForeground }]}>{daysRemaining(project.dueDate)} days remaining</AppText></View></View>
+            <AppText style={[styles.status, { color: colors.mutedForeground }]}>{archived ? 'Archived · ' : ''}{projectStatus(project, tasks)} · {projectHealth(project, tasks, calendarDate)}</AppText>
+            <ProjectProgress projectId={project.id} tasks={tasks} />
+            <View style={styles.footer}><AppText style={[styles.meta, { color: colors.mutedForeground }]}>Due {formatDate(project.dueDate)}</AppText><View style={[styles.deadline, { backgroundColor: daysRemaining(project.dueDate) <= 2 ? colors.accent : colors.secondary }]}><AppText style={[styles.deadlineText, { color: daysRemaining(project.dueDate) <= 2 ? colors.accentForeground : colors.secondaryForeground }]}>{daysRemaining(project.dueDate)} days remaining</AppText></View></View>
           </Pressable>
         );
       })}
@@ -31,6 +40,7 @@ export default function ProjectsScreen() {
 }
 
 const styles = StyleSheet.create({
+  filters: { flexDirection: 'row', gap: 10 }, filter: { minHeight: 46, flex: 1, borderWidth: 1, borderRadius: 12, justifyContent: 'center', alignItems: 'center' }, status: { fontSize: 12, marginVertical: 12 },
   content: { paddingHorizontal: 20, gap: 14 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
   kicker: { fontFamily: 'Inter_700Bold', letterSpacing: 1.5, fontSize: 10, marginBottom: 8 },
@@ -43,9 +53,7 @@ const styles = StyleSheet.create({
   name: { flex: 1, fontFamily: 'Inter_700Bold', fontSize: 16 },
   client: { fontSize: 12, marginTop: 7, marginLeft: 19 },
   summary: { fontSize: 13, lineHeight: 19, marginTop: 14 },
-  progressLine: { height: 5, borderRadius: 3, backgroundColor: '#EEF0F2', marginTop: 18, overflow: 'hidden' },
-  progressFill: { height: '100%', borderRadius: 3 },
-  footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 11 },
+  footer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center', marginTop: 11 },
   meta: { fontSize: 11, fontFamily: 'Inter_500Medium' },
   deadline: { borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5 },
   deadlineText: { fontFamily: 'Inter_600SemiBold', fontSize: 10 },

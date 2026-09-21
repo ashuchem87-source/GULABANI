@@ -65,7 +65,7 @@ function remainingLabel(days: number) {
 async function schedule(project: Project, tasks: ProjectTask[], askForPermission = true) {
   if (Platform.OS === 'web') return false;
   await cancelProjectReminders(project.id);
-  if (!masterEnabled) return false;
+  if (!masterEnabled || project.archived === true) return false;
   const allowed = askForPermission ? await requestReminderPermission() : (await Notifications.getPermissionsAsync()).granted;
   if (!masterEnabled || !allowed || !project.remindersEnabled) return allowed;
 
@@ -116,9 +116,9 @@ export function syncProjectReminders(projects: Project[], tasks: ProjectTask[], 
     if (Platform.OS === 'web') return;
     const stored = await readReminderIds();
     for (const id of Object.keys(stored)) {
-      if (!masterEnabled || !projects.some((project) => project.id === id && project.remindersEnabled)) await cancelProjectReminders(id);
+      if (!masterEnabled || !projects.some((project) => project.id === id && project.remindersEnabled && project.archived !== true)) await cancelProjectReminders(id);
     }
     if (!masterEnabled) return;
-    for (const project of projects) if (project.remindersEnabled) await schedule(project, tasks, false);
+    for (const project of projects) if (project.remindersEnabled && project.archived !== true) await schedule(project, tasks, false);
   });
 }
