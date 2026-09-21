@@ -46,6 +46,8 @@ type FlowContextValue = {
   tasks: ProjectTask[];
   templates: WorkflowTemplate[];
   hydrated: boolean;
+  updateTemplate: (id: string, input: Pick<WorkflowTemplate, 'name' | 'category' | 'description' | 'steps'>) => void;
+  deleteTemplate: (id: string) => void;
   addTemplate: (input: {
     name: string;
     category: string;
@@ -225,19 +227,36 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
     description: string;
     steps: WorkflowStep[];
   }) => {
+    if (!input.name.trim() || !input.steps.length || input.steps.some((step) => !step.title.trim())) return;
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const palette = ['#F26B5E', '#6BAF92', '#6F83C9', '#B787C8'];
     setTemplateList((current) => [
       {
         id,
-        name: input.name,
+        name: input.name.trim(),
         category: input.category,
         description: input.description,
-        steps: input.steps,
+        steps: input.steps.map((step) => ({ ...step, title: step.title.trim() })),
         color: palette[current.length % palette.length],
       },
       ...current,
     ]);
+  };
+
+  const updateTemplate: FlowContextValue['updateTemplate'] = (id, input) => {
+    if (!input.name.trim() || !input.steps.length || input.steps.some((step) => !step.title.trim())) return;
+    // Project tasks are independent snapshots; only the template collection changes.
+    setTemplateList((current) => current.map((template) => template.id === id ? {
+      ...template,
+      name: input.name.trim(),
+      category: input.category,
+      description: input.description,
+      steps: input.steps.map((step) => ({ ...step, title: step.title.trim() })),
+    } : template));
+  };
+
+  const deleteTemplate = (id: string) => {
+    setTemplateList((current) => current.filter((template) => template.id !== id));
   };
 
   const addProject = async (input: {
@@ -260,7 +279,8 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
       reminderFrequency: input.reminderFrequency,
       remindersEnabled: true,
     };
-    const template = templateList.find((item) => item.id === input.templateId) ?? templateList[0];
+    const template = templateList.find((item) => item.id === input.templateId);
+    if (!template || !template.steps.length) return;
     const newTasks = makeTasks(project, template);
     setProjects((current) => [project, ...current]);
     setTasks((current) => [...newTasks, ...current]);
@@ -312,7 +332,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   };
 
   const value = useMemo(
-    () => ({ projects, tasks, templates: templateList, hydrated, addTemplate, addProject, toggleTask, updateReminderFrequency, enableProjectReminders, deleteProject }),
+    () => ({ projects, tasks, templates: templateList, hydrated, addTemplate, updateTemplate, deleteTemplate, addProject, toggleTask, updateReminderFrequency, enableProjectReminders, deleteProject }),
     [projects, tasks, templateList, hydrated],
   );
 

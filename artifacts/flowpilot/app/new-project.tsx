@@ -16,16 +16,16 @@ export default function NewProjectScreen() {
   const [name, setName] = useState('');
   const [client, setClient] = useState('');
   const [summary, setSummary] = useState('');
-  const [templateId, setTemplateId] = useState(params.templateId ?? templates[0].id);
+  const [templateId, setTemplateId] = useState(params.templateId ?? templates[0]?.id);
   const [days, setDays] = useState('10');
   const [frequency, setFrequency] = useState<ReminderFrequency>('Daily');
   const selectedTemplate = useMemo(() => templates.find((template) => template.id === templateId) ?? templates[0], [templateId, templates]);
-  const canSave = name.trim().length > 1 && client.trim().length > 1;
+  const canSave = name.trim().length > 1 && client.trim().length > 1 && !!selectedTemplate?.steps.length;
   const save = async () => {
-    if (!canSave) return;
+    if (!canSave || !selectedTemplate) return;
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + Math.max(1, Number(days) || 10));
-    await addProject({ name: name.trim(), client: client.trim(), summary: summary.trim() || 'A new project ready to move through your system.', templateId, dueDate: dueDate.toISOString(), reminderFrequency: frequency });
+    await addProject({ name: name.trim(), client: client.trim(), summary: summary.trim() || 'A new project ready to move through your system.', templateId: selectedTemplate.id, dueDate: dueDate.toISOString(), reminderFrequency: frequency });
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     router.replace('/projects');
   };
@@ -43,7 +43,7 @@ export default function NewProjectScreen() {
           {templates.map((template) => <Pressable key={template.id} onPress={() => setTemplateId(template.id)} style={[styles.templateChoice, { borderColor: template.id === templateId ? template.color : colors.border, backgroundColor: template.id === templateId ? colors.card : 'transparent' }]}><View style={[styles.choiceDot, { backgroundColor: template.color }]} /><AppText style={styles.choiceName}>{template.name}</AppText><AppText style={[styles.choiceMeta, { color: colors.mutedForeground }]}>{template.steps.length} steps</AppText></Pressable>)}
         </ScrollView>
         <View style={styles.inlineFields}><View style={{ flex: 1 }}><AppText style={styles.label}>DEADLINE IN</AppText><View style={[styles.input, { borderColor: colors.input, backgroundColor: colors.card }]}><TextInput value={days} onChangeText={setDays} keyboardType="number-pad" style={[styles.inputText, { color: colors.foreground }]} /><AppText style={[styles.suffix, { color: colors.mutedForeground }]}>days</AppText></View></View><View style={{ flex: 1.3 }}><AppText style={styles.label}>REMIND ME</AppText><View style={styles.frequencyRow}>{(['Daily', 'Every 2 days', 'Weekly'] as ReminderFrequency[]).map((item) => <Pressable key={item} onPress={() => setFrequency(item)} style={[styles.frequency, { backgroundColor: frequency === item ? colors.foreground : colors.card, borderColor: frequency === item ? colors.foreground : colors.border }]}><AppText style={[styles.frequencyText, { color: frequency === item ? colors.background : colors.foreground }]}>{item === 'Every 2 days' ? '2d' : item === 'Daily' ? '1d' : '7d'}</AppText></Pressable>)}</View></View></View>
-        <View style={[styles.preview, { backgroundColor: colors.secondary }]}><Feather name="zap" size={16} color={colors.primary} /><View style={{ flex: 1 }}><AppText style={styles.previewTitle}>{selectedTemplate.name} is ready</AppText><AppText style={[styles.previewText, { color: colors.mutedForeground }]}>{selectedTemplate.steps.length} steps will be assigned automatically, starting with “{selectedTemplate.steps[0].title}”.</AppText></View></View>
+        <View style={[styles.preview, { backgroundColor: colors.secondary }]}><Feather name="zap" size={16} color={colors.primary} /><View style={{ flex: 1 }}><AppText style={styles.previewTitle}>{selectedTemplate ? `${selectedTemplate.name} is ready` : 'Create a template first'}</AppText><AppText style={[styles.previewText, { color: colors.mutedForeground }]}>{selectedTemplate ? `${selectedTemplate.steps.length} steps will be assigned automatically, starting with “${selectedTemplate.steps[0]?.title ?? ''}”.` : 'Add a template in the Templates tab before creating a project.'}</AppText></View></View>
         <Pressable testID="save-project" disabled={!canSave} onPress={save} style={({ pressed }) => [styles.save, { backgroundColor: canSave ? colors.primary : colors.input, opacity: pressed ? 0.78 : 1 }]}><AppText style={styles.saveText}>Create project</AppText><Feather name="arrow-right" size={17} color="#FFFFFF" /></Pressable>
       </ScrollView>
     </KeyboardAvoidingView>

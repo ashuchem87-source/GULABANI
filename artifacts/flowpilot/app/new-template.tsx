@@ -1,25 +1,34 @@
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText } from '@/components/AppText';
-import { WorkflowStep, useFlow } from '@/context/FlowContext';
+import { WorkflowStep, WorkflowTemplate, useFlow } from '@/context/FlowContext';
 import { useColors } from '@/hooks/useColors';
 
 export default function NewTemplateScreen() {
+  const { templateId } = useLocalSearchParams<{ templateId?: string }>();
+  const { templates, hydrated } = useFlow();
+  const template = templates.find((item) => item.id === templateId);
+  if (!hydrated) return <AppText>Loading templates…</AppText>;
+  if (templateId && !template) return <View style={{ padding: 24 }}><AppText>This template is no longer available.</AppText><Pressable onPress={() => router.replace('/templates')}><AppText>Back to templates</AppText></Pressable></View>;
+  return <TemplateForm key={templateId ?? 'new'} template={template} />;
+}
+
+function TemplateForm({ template }: { template?: WorkflowTemplate }) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { addTemplate } = useFlow();
-  const [name, setName] = useState('');
-  const [category, setCategory] = useState('');
-  const [description, setDescription] = useState('');
-  const [steps, setSteps] = useState<WorkflowStep[]>([
+  const { addTemplate, updateTemplate } = useFlow();
+  const [name, setName] = useState(template?.name ?? '');
+  const [category, setCategory] = useState(template?.category ?? '');
+  const [description, setDescription] = useState(template?.description ?? '');
+  const [steps, setSteps] = useState<WorkflowStep[]>(() => template ? template.steps.map((step) => ({ ...step })) : [
     { id: 'step-1', title: '', description: '', duration: 1 },
     { id: 'step-2', title: '', description: '', duration: 1 },
   ]);
-  const canSave = name.trim().length > 1 && steps.every((step) => step.title.trim().length > 1);
+  const canSave = name.trim().length > 0 && steps.length > 0 && steps.every((step) => step.title.trim().length > 0);
 
   const updateStep = (id: string, title: string) => {
     setSteps((current) => current.map((step) => (step.id === id ? { ...step, title } : step)));
@@ -30,17 +39,19 @@ export default function NewTemplateScreen() {
   };
 
   const addStep = () => {
-    setSteps((current) => [...current, { id: `step-${Date.now()}`, title: '', description: '', duration: 1 }]);
+    setSteps((current) => [...current, { id: `step-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title: '', description: '', duration: 1 }]);
   };
 
   const save = () => {
     if (!canSave) return;
-    addTemplate({
+    const input = {
       name: name.trim(),
       category: category.trim() || 'General',
       description: description.trim() || 'A reusable project flow for your work.',
       steps: steps.map((step) => ({ ...step, title: step.title.trim() })),
-    });
+    };
+    if (template) updateTemplate(template.id, input);
+    else addTemplate(input);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     router.replace('/templates');
   };
@@ -48,8 +59,8 @@ export default function NewTemplateScreen() {
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: Platform.OS === 'web' ? 24 : insets.top + 14, paddingBottom: insets.bottom + 34 }]} keyboardShouldPersistTaps="handled">
-        <View style={styles.top}><Pressable onPress={() => router.back()} hitSlop={10}><Feather name="arrow-left" size={22} color={colors.foreground} /></Pressable><AppText style={styles.topTitle}>New template</AppText><View style={{ width: 22 }} /></View>
-        <AppText style={styles.heading}>Build your repeatable flow.</AppText>
+        <View style={styles.top}><Pressable onPress={() => router.back()} hitSlop={10}><Feather name="arrow-left" size={22} color={colors.foreground} /></Pressable><AppText style={styles.topTitle}>{template ? 'Edit template' : 'New template'}</AppText><View style={{ width: 22 }} /></View>
+        <AppText style={styles.heading}>{template ? 'Update your repeatable flow.' : 'Build your repeatable flow.'}</AppText>
         <AppText style={[styles.intro, { color: colors.mutedForeground }]}>These steps will be available every time you start a matching project.</AppText>
 
         <Field label="TEMPLATE NAME" value={name} onChangeText={setName} placeholder="e.g. Website launch" colors={colors} />
@@ -62,11 +73,13 @@ export default function NewTemplateScreen() {
             <View style={[styles.stepNumber, { backgroundColor: colors.foreground }]}><AppText style={[styles.stepNumberText, { color: colors.background }]}>{index + 1}</AppText></View>
             <TextInput testID={`template-step-${index + 1}`} value={step.title} onChangeText={(value) => updateStep(step.id, value)} placeholder="Name this step" placeholderTextColor={colors.mutedForeground} style={[styles.stepInput, { color: colors.foreground }]} />
             <View style={[styles.durationInput, { borderLeftColor: colors.border }]}><TextInput value={String(step.duration)} onChangeText={(value) => updateStepDuration(step.id, value)} keyboardType="number-pad" style={[styles.durationText, { color: colors.foreground }]} /><AppText style={[styles.durationSuffix, { color: colors.mutedForeground }]}>days</AppText></View>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Delete step ${index + 1}`} testID={`delete-template-step-${index + 1}`} onPress={() => setSteps((current) => current.filter((item) => item.id !== step.id))} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}><Feather name="trash-2" size={17} color={colors.mutedForeground} /></Pressable>
           </View>
         ))}
         <Pressable onPress={addStep} style={({ pressed }) => [styles.addStep, { borderColor: colors.input, opacity: pressed ? 0.65 : 1 }]}><Feather name="plus" size={15} color={colors.primary} /><AppText style={[styles.addStepText, { color: colors.primary }]}>Add another step</AppText></Pressable>
 
-        <View style={[styles.preview, { backgroundColor: colors.secondary }]}><Feather name="layers" size={16} color={colors.primary} /><View style={{ flex: 1 }}><AppText style={styles.previewTitle}>Ready to reuse</AppText><AppText style={[styles.previewText, { color: colors.mutedForeground }]}>Your template will appear in the Templates tab and can be selected when creating a project.</AppText></View></View>
+        {!canSave && <AppText style={[styles.stepHint, { color: colors.mutedForeground }]}>Enter a template name and at least one step. Every step needs a name.</AppText>}
+        <View style={[styles.preview, { backgroundColor: colors.secondary }]}><Feather name="layers" size={16} color={colors.primary} /><View style={{ flex: 1 }}><AppText style={styles.previewTitle}>Ready to reuse</AppText><AppText style={[styles.previewText, { color: colors.mutedForeground }]}>{template ? 'Changes apply to future projects. Existing projects keep their current tasks.' : 'Your template will appear in the Templates tab and can be selected when creating a project.'}</AppText></View></View>
         <Pressable testID="save-template" disabled={!canSave} onPress={save} style={({ pressed }) => [styles.save, { backgroundColor: canSave ? colors.primary : colors.input, opacity: pressed ? 0.78 : 1 }]}><AppText style={styles.saveText}>Save template</AppText><Feather name="check" size={17} color="#FFFFFF" /></Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
