@@ -12,13 +12,13 @@ import { useColors } from '@/hooks/useColors';
 export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { projects, tasks } = useFlow();
+  const { projects, tasks, calendarDate } = useFlow();
   const openTasks = tasks.filter((task) => task.status === 'todo');
   const nextTask = [...openTasks].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0];
   const activeProjects = projects.filter((project) => daysRemaining(project.dueDate) >= 0).length;
   const completed = tasks.filter((task) => task.status === 'done').length;
   const progress = tasks.length ? Math.round((completed / tasks.length) * 100) : 0;
-  const urgentTasks = useMemo(() => openTasks.filter((task) => daysRemaining(task.dueDate) <= 2).slice(0, 3), [tasks]);
+  const urgentTasks = useMemo(() => openTasks.filter((task) => daysRemaining(task.dueDate) <= 2).slice(0, 3), [tasks, calendarDate]);
 
   return (
     <ScrollView

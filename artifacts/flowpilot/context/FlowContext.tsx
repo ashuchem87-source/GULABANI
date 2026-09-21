@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { AppState } from 'react-native';
 import { scheduleProjectReminders } from '@/lib/notifications';
-import { parseTaskDate } from '@/lib/task-utils';
+import { addCalendarDays, calendarDaysUntil, localDateValue, parseTaskDate, projectStartDate, readDate } from '@/lib/task-utils';
 
 export type ReminderFrequency = 'Daily' | 'Every 2 days' | 'Weekly';
 export type TaskStatus = 'todo' | 'done';
@@ -29,6 +30,7 @@ export type Project = {
   summary: string;
   templateId: string;
   startDate: string;
+  projectStartDate?: string;
   dueDate: string;
   reminderFrequency: ReminderFrequency;
   remindersEnabled: boolean;
@@ -48,6 +50,7 @@ type FlowContextValue = {
   tasks: ProjectTask[];
   templates: WorkflowTemplate[];
   hydrated: boolean;
+  calendarDate: string;
   updateTemplate: (id: string, input: Pick<WorkflowTemplate, 'name' | 'category' | 'description' | 'steps'>) => void;
   deleteTemplate: (id: string) => void;
   addTemplate: (input: {
@@ -62,8 +65,9 @@ type FlowContextValue = {
     summary: string;
     templateId: string;
     dueDate: string;
+    projectStartDate?: string;
     reminderFrequency: ReminderFrequency;
-  }) => void;
+  }) => Promise<boolean>;
   addManualTask: (projectId: string, input: { title: string; dueDate: string }) => boolean;
   toggleTask: (taskId: string, projectId?: string) => void;
   updateReminderFrequency: (projectId: string, frequency: ReminderFrequency) => void;
@@ -145,10 +149,9 @@ const starterProjects: Project[] = [
 ];
 
 const makeTasks = (project: Project, template: WorkflowTemplate): ProjectTask[] => {
-  let cursor = new Date(project.startDate);
+  let cursor = projectStartDate(project);
   return template.steps.map((step, index) => {
-    const dueDate = new Date(cursor);
-    dueDate.setDate(dueDate.getDate() + step.duration);
+    const dueDate = addCalendarDays(cursor, step.duration);
     cursor = dueDate;
     return {
       ...step,
@@ -170,7 +173,7 @@ const FlowContext = createContext<FlowContextValue | null>(null);
 const STORAGE_KEY = 'flowpilot-state-v1';
 
 function recalculateTimeline(project: Project, projectTasks: ProjectTask[]) {
-  let cursor = new Date(project.startDate);
+  let cursor = projectStartDate(project, projectTasks);
   const updatedTasks = [...projectTasks]
     .sort((a, b) => a.order - b.order)
     .map((task) => {
@@ -200,6 +203,21 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   const [projects, setProjects] = useState<Project[]>(starterProjects);
   const [tasks, setTasks] = useState<ProjectTask[]>(starterTasks);
   const [hydrated, setHydrated] = useState(false);
+  const [calendarDate, setCalendarDate] = useState(localDateValue);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const refresh = () => {
+      clearTimeout(timer);
+      setCalendarDate(localDateValue());
+      const now = new Date();
+      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      timer = setTimeout(refresh, midnight.getTime() - now.getTime() + 50);
+    };
+    refresh();
+    const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') refresh(); });
+    return () => { clearTimeout(timer); subscription.remove(); };
+  }, []);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
@@ -207,14 +225,18 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
         if (stored) {
           const parsed = JSON.parse(stored) as { projects: Project[]; tasks: ProjectTask[]; templates?: WorkflowTemplate[] };
           if (parsed.templates) setTemplateList(parsed.templates);
-          const storedProjects = parsed.projects.map((project) => ({ ...project, remindersEnabled: project.remindersEnabled ?? false }));
+          const storedProjects = parsed.projects.map((project) => ({
+            ...project,
+            startDate: Number.isFinite(readDate(project.startDate).getTime()) ? project.startDate : projectStartDate(project, parsed.tasks).toISOString(),
+            remindersEnabled: project.remindersEnabled ?? false,
+          }));
           const storedTasks = parsed.tasks.map((task) => ({
             ...task,
             ...(task.status === 'done' ? { completedAt: task.completedAt ?? task.dueDate } : {}),
           }));
-          const normalized = storedProjects.map((project) => recalculateTimeline(project, storedTasks.filter((task) => task.projectId === project.id)));
-          setProjects(normalized.map(({ project }) => project));
-          setTasks(normalized.flatMap(({ tasks }) => tasks).concat(storedTasks.filter((task) => !storedProjects.some((project) => project.id === task.projectId))));
+          // Loading must not reschedule historical tasks or overwrite deadlines.
+          setProjects(storedProjects);
+          setTasks(storedTasks);
         }
       })
       .finally(() => setHydrated(true));
@@ -270,8 +292,11 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
     summary: string;
     templateId: string;
     dueDate: string;
+    projectStartDate?: string;
     reminderFrequency: ReminderFrequency;
   }) => {
+    const selectedStart = parseTaskDate(input.projectStartDate ?? localDateValue());
+    if (!selectedStart || !Number.isFinite(readDate(input.dueDate).getTime())) return false;
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const project: Project = {
       id,
@@ -279,17 +304,19 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
       client: input.client,
       summary: input.summary,
       templateId: input.templateId,
-      startDate: new Date().toISOString(),
+      startDate: selectedStart.toISOString(),
+      projectStartDate: localDateValue(selectedStart),
       dueDate: input.dueDate,
       reminderFrequency: input.reminderFrequency,
       remindersEnabled: true,
     };
     const template = templateList.find((item) => item.id === input.templateId);
-    if (!template || !template.steps.length) return;
+    if (!template || !template.steps.length) return false;
     const newTasks = makeTasks(project, template);
     setProjects((current) => [project, ...current]);
     setTasks((current) => [...newTasks, ...current]);
     await scheduleProjectReminders(project, newTasks);
+    return true;
   };
 
   const addManualTask: FlowContextValue['addManualTask'] = (projectId, input) => {
@@ -366,8 +393,8 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   };
 
   const value = useMemo(
-    () => ({ projects, tasks, templates: templateList, hydrated, addTemplate, updateTemplate, deleteTemplate, addProject, addManualTask, toggleTask, updateReminderFrequency, enableProjectReminders, deleteProject }),
-    [projects, tasks, templateList, hydrated],
+    () => ({ projects, tasks, templates: templateList, hydrated, calendarDate, addTemplate, updateTemplate, deleteTemplate, addProject, addManualTask, toggleTask, updateReminderFrequency, enableProjectReminders, deleteProject }),
+    [projects, tasks, templateList, hydrated, calendarDate],
   );
 
   return <FlowContext.Provider value={value}>{children}</FlowContext.Provider>;
@@ -379,13 +406,10 @@ export function useFlow() {
   return context;
 }
 
-export function daysRemaining(date: string) {
-  const target = new Date(date).getTime();
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  return Math.ceil((target - start.getTime()) / 86400000);
+export function daysRemaining(date: string, today = new Date()) {
+  return calendarDaysUntil(date, today);
 }
 
 export function formatShortDate(date: string) {
-  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(new Date(date));
+  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(readDate(date));
 }

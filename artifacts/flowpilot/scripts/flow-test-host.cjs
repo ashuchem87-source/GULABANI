@@ -22,7 +22,7 @@ function loadSource(file, mocks = {}, globals = {}) {
   return module.exports;
 }
 
-function host(storage) {
+function host(storage, { mocks = {}, globals = {} } = {}) {
   const state = [], deps = [];
   let cursor = 0, effectCursor = 0, effects = [];
   const react = {
@@ -41,12 +41,14 @@ function host(storage) {
   };
   const { FlowProvider } = loadSource('context/FlowContext.tsx', {
     react,
+    'react-native': { AppState: { addEventListener: () => ({ remove() {} }) } },
     '@react-native-async-storage/async-storage': {
       getItem: async () => storage.value ?? null,
       setItem: async (key, value) => { assert.equal(key, 'flowpilot-state-v1'); storage.value = value; },
     },
     '@/lib/notifications': { scheduleProjectReminders: async () => true },
-  });
+    ...mocks,
+  }, { setTimeout: () => 0, clearTimeout: () => {}, ...globals });
   return async () => {
     let value;
     for (let pass = 0; pass < 3; pass++) {

@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import type { Project, ProjectTask } from '@/context/FlowContext';
+import { calendarDaysUntil } from '@/lib/task-utils';
 
 const REMINDER_IDS_KEY = 'flowpilot-scheduled-reminder-ids-v1';
 
@@ -73,7 +74,7 @@ export async function scheduleProjectReminders(project: Project, tasks: ProjectT
   const interval = cadenceInDays(project);
   const ids: string[] = [];
   for (let fireAt = new Date(firstReminder); fireAt <= projectDeadline && ids.length < 60; fireAt.setDate(fireAt.getDate() + interval)) {
-    const days = Math.ceil((new Date(nextTask.dueDate).getTime() - fireAt.getTime()) / 86400000);
+    const days = calendarDaysUntil(nextTask.dueDate, fireAt);
     const id = await Notifications.scheduleNotificationAsync({
       content: {
         title: 'FlowPilot · Next step',
