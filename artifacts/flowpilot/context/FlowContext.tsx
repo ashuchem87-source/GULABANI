@@ -2,7 +2,8 @@ import { PROJECT_STATUSES, projectProgress, projectStatus, transitionProject, is
 import { useSettings } from '@/context/SettingsContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState } from 'react-native';
+import { Alert, AppState } from 'react-native';
+import { dependencyIds, getIncompleteDependencies, removeTaskAndDependencies, validateDependencies, validateRescheduleProposal, type RescheduleProposal } from '@/lib/workflow-intelligence';
 import { scheduleProjectReminders, syncProjectReminders } from '@/lib/notifications';
 import { addCalendarDays, calendarDaysUntil, localDateValue, parseTaskDate, projectStartDate, readDate } from '@/lib/task-utils';
 import { completePersonal, personalFields, validatePersonal, type PersonalInput, type PersonalTask } from '@/lib/personal-tasks';
@@ -43,6 +44,7 @@ export type Project = {
 };
 
 export type ProjectTask = WorkflowStep & {
+  dependsOn?: string[];
   projectId: string;
   status: TaskStatus;
   dueDate: string;
@@ -82,6 +84,9 @@ type FlowContextValue = {
   }) => Promise<boolean>;
   addManualTask: (projectId: string, input: { title: string; dueDate: string }) => boolean;
   toggleTask: (taskId: string, projectId?: string) => void;
+  setTaskDependencies: (projectId: string, taskId: string, ids: string[]) => string | undefined;
+  deleteProjectTask: (projectId: string, taskId: string, confirmed?: boolean) => boolean;
+  applyReschedule: (proposal: RescheduleProposal, extendDeadline?: boolean) => string | undefined;
   updateReminderFrequency: (projectId: string, frequency: ReminderFrequency) => void;
   enableProjectReminders: (projectId: string) => Promise<boolean>;
   deleteProject: (projectId: string) => void;
@@ -421,11 +426,63 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
-  const toggleTask = (taskId: string, projectId?: string) => {
+  const setTaskDependencies: FlowContextValue['setTaskDependencies'] = (projectId, taskId, ids) => {
+    const { projects, tasks } = projectSnapshot.current;
+    const project = projects.find((item) => item.id === projectId);
+    const task = tasks.find((item) => item.projectId === projectId && item.id === taskId);
+    if (!hydrated || !project || isArchived(project) || !task) return 'This task is unavailable. Unarchive its project before editing.';
+    const error = validateDependencies(task, ids, tasks);
+    if (error) return error;
+    commitProjectState(projects, tasks.map((item) => item === task ? { ...item, dependsOn: [...new Set(ids)] } : item));
+  };
+
+  const deleteProjectTask: FlowContextValue['deleteProjectTask'] = (projectId, taskId, confirmed = false) => {
+    const { projects, tasks } = projectSnapshot.current;
+    const project = projects.find((item) => item.id === projectId);
+    if (!hydrated || !confirmed || !project || isArchived(project) || !tasks.some((task) => task.projectId === projectId && task.id === taskId)) return false;
+    // Freeze legacy status: deleting a task is not a completion event.
+    const updatedProject = { ...project, status: projectStatus(project, tasks) };
+    const nextTasks = removeTaskAndDependencies(projectId, taskId, tasks);
+    commitProjectState(projects.map((item) => item.id === projectId ? updatedProject : item), nextTasks);
+    if (settings.notificationsEnabled && project.remindersEnabled) void scheduleProjectReminders(updatedProject, nextTasks, false)
+      .catch(() => setPersonalReminderNotice('Project reminders could not be updated. Reopen the app to retry.'));
+    return true;
+  };
+
+  const applyReschedule: FlowContextValue['applyReschedule'] = (proposal, extendDeadline = false) => {
+    const { projects, tasks } = projectSnapshot.current;
+    const project = projects.find((item) => item.id === proposal.projectId);
+    if (!hydrated || !project) return 'This project is unavailable.';
+    const error = validateRescheduleProposal(proposal, project, tasks, localDateValue());
+    if (error) return error;
+    if (!proposal.changes.length) return;
+    const dates = new Map(proposal.changes.map((change) => [change.taskId, change.to]));
+    const nextTasks = tasks.map((task) => task.projectId === project.id && dates.has(task.id) ? { ...task, dueDate: dates.get(task.id)! } : task);
+    const updatedProject = extendDeadline && proposal.beyondDeadlineDays > 0 ? { ...project, dueDate: proposal.proposedDeadline } : project;
+    commitProjectState(projects.map((item) => item.id === project.id ? updatedProject : item), nextTasks);
+    if (settings.notificationsEnabled && project.remindersEnabled) void scheduleProjectReminders(updatedProject, nextTasks, false)
+      .catch(() => setPersonalReminderNotice('Project reminders could not be updated. Reopen the app to retry.'));
+  };
+
+  const toggleTask = (taskId: string, projectId?: string, override = false) => {
     const { projects, tasks } = projectSnapshot.current;
     const task = tasks.find((item) => item.id === taskId && (!projectId || item.projectId === projectId));
     const project = task ? projects.find((item) => item.id === task.projectId) : undefined;
     if (!hydrated || !task || !project) return;
+
+    if (!override && task.status !== 'done' && getIncompleteDependencies(task, tasks).length) {
+      const selectedDependencies = JSON.stringify(dependencyIds(task));
+      Alert.alert('Incomplete prerequisites', 'This task still has incomplete prerequisites. Complete it anyway?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Complete Anyway', onPress: () => {
+          const latest = projectSnapshot.current.tasks.find((item) => item.projectId === task.projectId && item.id === task.id);
+          // Repeated/stale confirmation must never reopen a completed task.
+          if (!latest || latest.status === 'done') return;
+          toggleTask(task.id, task.projectId, JSON.stringify(dependencyIds(latest)) === selectedDependencies);
+        } },
+      ]);
+      return;
+    }
 
     if (task.isManual) {
       const nextTasks = tasks.map((item) => item.projectId === project.id && item.id === task.id ? {
@@ -504,7 +561,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   };
 
   const value = useMemo(
-    () => ({ projects, tasks, templates: templateList, hydrated, calendarDate, personalTasks, personalReminderNotice, savePersonalTask, completePersonalTask, reopenPersonalTask, deletePersonalTask, addTemplate, updateTemplate, deleteTemplate, addProject, addManualTask, toggleTask, updateReminderFrequency, enableProjectReminders, deleteProject, setProjectStatus, setProjectArchived }),
+    () => ({ projects, tasks, templates: templateList, hydrated, calendarDate, personalTasks, personalReminderNotice, savePersonalTask, completePersonalTask, reopenPersonalTask, deletePersonalTask, addTemplate, updateTemplate, deleteTemplate, addProject, addManualTask, toggleTask, setTaskDependencies, deleteProjectTask, applyReschedule, updateReminderFrequency, enableProjectReminders, deleteProject, setProjectStatus, setProjectArchived }),
     [projects, tasks, templateList, hydrated, calendarDate, personalTasks, personalReminderNotice, settings.notificationsEnabled],
   );
 

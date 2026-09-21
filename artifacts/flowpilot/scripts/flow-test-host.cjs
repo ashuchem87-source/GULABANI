@@ -17,6 +17,8 @@ function loadSource(file, mocks = {}, globals = {}) {
       return { jsx, jsxs: jsx, Fragment: 'Fragment' };
     }
     if (name === '@/lib/project-management') return loadSource('lib/project-management.ts');
+    if (name === '@/lib/workflow-intelligence') return loadSource('lib/workflow-intelligence.ts');
+    if (name === '@/components/WorkflowIntelligence') return { WorkflowSummary: 'WorkflowSummary', TaskWorkflowActions: 'TaskWorkflowActions' };
     if (name === '@/components/ProjectManagement') return { ProjectManagement: 'ProjectManagement' };
     if (name === '@/components/ProjectProgress') return { ProjectProgress: 'ProjectProgress' };
     if (name === '@/lib/dashboard') return loadSource('lib/dashboard.ts');

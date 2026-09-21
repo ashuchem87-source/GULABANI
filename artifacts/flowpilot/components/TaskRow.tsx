@@ -5,22 +5,25 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { AppText } from '@/components/AppText';
 import { ProjectTask, daysRemaining, useFlow } from '@/context/FlowContext';
 import { useColors } from '@/hooks/useColors';
+import { getIncompleteDependencies } from '@/lib/workflow-intelligence';
 
 export function TaskRow({ task, compact = false }: { task: ProjectTask; compact?: boolean }) {
   const colors = useColors();
   const formatShortDate = useDateFormatter();
-  const { toggleTask, projects } = useFlow();
+  const { toggleTask, projects, tasks } = useFlow();
   const project = projects.find((item) => item.id === task.projectId);
   const remaining = daysRemaining(task.dueDate);
   const isDone = task.status === 'done';
-  const dueLabel = isDone ? task.completedAt ? `Completed ${formatShortDate(task.completedAt)}` : 'Completed' : remaining < 0 ? `${Math.abs(remaining)}d overdue` : remaining === 0 ? 'Due today' : `${remaining}d left`;
+  const hasDate = Number.isFinite(remaining);
+  const blockers = getIncompleteDependencies(task, tasks ?? []);
+  const dueLabel = isDone ? task.completedAt ? `Completed ${formatShortDate(task.completedAt)}` : 'Completed' : !hasDate ? 'No due date' : remaining < 0 ? `${Math.abs(remaining)}d overdue` : remaining === 0 ? 'Due today' : `${remaining}d left`;
 
   return (
     <Pressable
       testID={`task-${task.id}`}
       accessibilityRole="checkbox"
       accessibilityState={{ checked: isDone }}
-      accessibilityLabel={`${isDone ? 'Reopen' : 'Complete'} ${task.title}`}
+      accessibilityLabel={`${isDone ? 'Reopen' : 'Complete'} ${task.title}${!isDone && blockers.length ? `, blocked by ${blockers.length} tasks` : ''}`}
       onPress={() => {
         Haptics.selectionAsync();
         toggleTask(task.id, task.projectId);
@@ -32,6 +35,7 @@ export function TaskRow({ task, compact = false }: { task: ProjectTask; compact?
       </View>
       <View style={styles.copy}>
         <AppText style={[styles.title, { color: isDone ? colors.mutedForeground : colors.foreground, textDecorationLine: isDone ? 'line-through' : 'none' }]}>{task.title}</AppText>
+        {!isDone && <AppText style={[styles.project, { color: colors.mutedForeground }]}>{blockers.length ? `Blocked by ${blockers.length} task${blockers.length === 1 ? '' : 's'}` : 'Ready'}</AppText>}
         {!compact && project ? <AppText style={[styles.project, { color: colors.mutedForeground }]}>{project.name}</AppText> : null}
       </View>
       {!isDone ? (
@@ -41,7 +45,7 @@ export function TaskRow({ task, compact = false }: { task: ProjectTask; compact?
       ) : (
         <AppText style={[styles.doneText, { color: colors.mutedForeground }]}>{dueLabel}</AppText>
       )}
-      {!compact && !isDone ? <AppText style={[styles.date, { color: colors.mutedForeground }]}>{formatShortDate(task.dueDate)}</AppText> : null}
+      {!compact && !isDone && hasDate ? <AppText style={[styles.date, { color: colors.mutedForeground }]}>{formatShortDate(task.dueDate)}</AppText> : null}
     </Pressable>
   );
 }
