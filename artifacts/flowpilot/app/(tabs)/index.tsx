@@ -4,116 +4,69 @@ import { useMemo } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText } from '@/components/AppText';
-import { SectionTitle } from '@/components/SectionTitle';
 import { TaskRow } from '@/components/TaskRow';
-import { daysRemaining, useFlow } from '@/context/FlowContext';
+import { PersonalTaskRow } from '@/components/PersonalTaskRow';
+import { QuickAdd } from '@/components/QuickAdd';
+import { useFlow } from '@/context/FlowContext';
+import { useDateFormatter, useSettings } from '@/context/SettingsContext';
 import { useColors } from '@/hooks/useColors';
+import { dashboardGroups, dashboardCounts, dashboardEntryKey, DASHBOARD_LIMIT, type DashboardBucket } from '@/lib/dashboard';
 
 export default function HomeScreen() {
-  const colors = useColors();
-  const insets = useSafeAreaInsets();
-  const { projects, tasks, calendarDate } = useFlow();
-  const openTasks = tasks.filter((task) => task.status === 'todo');
-  const nextTask = [...openTasks].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0];
-  const activeProjects = projects.filter((project) => daysRemaining(project.dueDate) >= 0).length;
-  const completed = tasks.filter((task) => task.status === 'done').length;
-  const progress = tasks.length ? Math.round((completed / tasks.length) * 100) : 0;
-  const urgentTasks = useMemo(() => openTasks.filter((task) => daysRemaining(task.dueDate) <= 2).slice(0, 3), [tasks, calendarDate]);
-
-  return (
-    <ScrollView
-      style={{ backgroundColor: colors.background }}
-      contentContainerStyle={[styles.content, { paddingTop: Platform.OS === 'web' ? 67 : insets.top + 18, paddingBottom: insets.bottom + 90 }]}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.header}>
-        <View>
-          <AppText style={[styles.eyebrow, { color: colors.primary }]}>SUNDAY, SEPTEMBER 20</AppText>
-          <AppText style={styles.greeting}>Good morning, Ashu.</AppText>
-          <AppText style={[styles.subhead, { color: colors.mutedForeground }]}>Let’s keep the important things moving.</AppText>
-        </View>
-        <Pressable testID="add-project" onPress={() => router.push('/new-project')} style={({ pressed }) => [styles.addButton, { backgroundColor: colors.foreground, opacity: pressed ? 0.8 : 1 }]}>
-          <Feather name="plus" size={20} color={colors.background} />
-        </Pressable>
+  const colors = useColors(), insets = useSafeAreaInsets();
+  const { projects, tasks, personalTasks, calendarDate, hydrated } = useFlow();
+  const { settings } = useSettings();
+  const formatDate = useDateFormatter();
+  const groups = useMemo(() => dashboardGroups(tasks, personalTasks, calendarDate, settings),
+    [tasks, personalTasks, calendarDate, settings.showPersonal, settings.showProjects, settings.showCompleted]);
+  const counts = dashboardCounts(groups);
+  const projectNames = useMemo(() => new Map(projects.map((project) => [project.id, project.name])), [projects]);
+  const summaries: { key: DashboardBucket; label: string }[] = [
+    { key: 'today', label: 'Today' }, { key: 'overdue', label: 'Overdue' }, { key: 'upcoming', label: 'Upcoming' },
+    ...(settings.showCompleted ? [{ key: 'completed' as const, label: 'Completed Today' }] : []),
+  ];
+  const section = (key: DashboardBucket, title: string, limit?: number) => {
+    const entries = groups[key];
+    if (!entries.length) return null;
+    return <View key={key} testID={'dashboard-' + key} style={styles.section}>
+      <View style={styles.sectionHeader}><AppText accessibilityRole="header" style={[styles.sectionTitle, { color: key === 'overdue' ? colors.accentForeground : colors.foreground }]}>{title}</AppText>
+        {limit && entries.length > limit ? <Pressable testID={'view-all-' + key} accessibilityRole="button" accessibilityLabel={'View all ' + title.toLowerCase() + ' tasks in To-do'} onPress={() => router.push('/tasks')} style={styles.viewAll}><AppText style={{ color: colors.primary, fontSize: 13 }}>View all</AppText><Feather name="arrow-up-right" size={15} color={colors.primary} /></Pressable> : null}
       </View>
-
-      <View style={[styles.hero, { backgroundColor: colors.panel }]}>
-        <View style={styles.heroTop}>
-          <View style={styles.nextLabel}><View style={[styles.liveDot, { backgroundColor: colors.primary }]} /><AppText style={[styles.heroLabel, { color: '#D6DCE8' }]}>YOUR NEXT STEP</AppText></View>
-          <Feather name="arrow-up-right" size={20} color="#B7C1D4" />
-        </View>
-        {nextTask ? (
-          <>
-            <AppText style={styles.heroTitle}>{nextTask.title}</AppText>
-            <AppText style={styles.heroProject}>{projects.find((project) => project.id === nextTask.projectId)?.name ?? 'Project'}</AppText>
-            <View style={styles.heroBottom}>
-              <AppText style={[styles.heroDue, { color: daysRemaining(nextTask.dueDate) <= 1 ? '#FFB6A9' : '#D6DCE8' }]}>{daysRemaining(nextTask.dueDate) <= 0 ? 'Needs attention today' : `${daysRemaining(nextTask.dueDate)} days remaining`}</AppText>
-              <Pressable onPress={() => router.push('/tasks')} style={({ pressed }) => [styles.openButton, { backgroundColor: colors.action, opacity: pressed ? 0.75 : 1 }]}><AppText style={styles.openButtonText}>Open task</AppText><Feather name="arrow-right" size={14} color={colors.primaryForeground} /></Pressable>
-            </View>
-          </>
-        ) : <AppText style={styles.heroTitle}>You’re all caught up.</AppText>}
-      </View>
-
-      <View style={styles.metrics}>
-        <View style={styles.metric}><AppText style={[styles.metricValue, { color: colors.foreground }]}>{activeProjects}</AppText><AppText style={[styles.metricLabel, { color: colors.mutedForeground }]}>Active projects</AppText></View>
-        <View style={[styles.metric, { borderLeftColor: colors.border, borderLeftWidth: 1 }]}><AppText style={[styles.metricValue, { color: colors.foreground }]}>{openTasks.length}</AppText><AppText style={[styles.metricLabel, { color: colors.mutedForeground }]}>Open steps</AppText></View>
-        <View style={[styles.metric, { borderLeftColor: colors.border, borderLeftWidth: 1 }]}><AppText style={[styles.metricValue, { color: colors.primary }]}>{progress}%</AppText><AppText style={[styles.metricLabel, { color: colors.mutedForeground }]}>Complete</AppText></View>
-      </View>
-
-      <View style={styles.section}>
-        <SectionTitle title="Needs attention" action="See all" onAction={() => router.push('/tasks')} />
-        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>{urgentTasks.length ? urgentTasks.map((task) => <TaskRow key={task.id} task={task} compact />) : <AppText style={[styles.empty, { color: colors.mutedForeground }]}>Nothing urgent right now.</AppText>}</View>
-      </View>
-
-      <View style={styles.section}>
-        <SectionTitle title="Your projects" action="View all" onAction={() => router.push('/projects')} />
-        {projects.slice(0, 3).map((project) => {
-          const projectTasks = tasks.filter((task) => task.projectId === project.id);
-          const done = projectTasks.filter((task) => task.status === 'done').length;
-          return (
-            <Pressable key={project.id} onPress={() => router.push({ pathname: '/project/[id]', params: { id: project.id } })} style={({ pressed }) => [styles.projectCard, { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.75 : 1 }]}>
-              <View style={styles.projectInfo}><View style={[styles.projectDot, { backgroundColor: colors.primary }]} /><View style={{ flex: 1, gap: 4 }}><AppText style={styles.projectName}>{project.name}</AppText><AppText style={[styles.projectClient, { color: colors.mutedForeground }]}>{project.client}</AppText></View><Feather name="chevron-right" size={18} color={colors.mutedForeground} /></View>
-              <View style={styles.progressLine}><View style={[styles.progressFill, { backgroundColor: colors.primary, width: `${projectTasks.length ? (done / projectTasks.length) * 100 : 0}%` }]} /></View>
-              <View style={styles.projectMeta}><AppText style={[styles.projectClient, { color: colors.mutedForeground }]}>{done} of {projectTasks.length} steps complete</AppText><AppText style={[styles.projectClient, { color: colors.mutedForeground }]}>{daysRemaining(project.dueDate)}d left</AppText></View>
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        {(limit ? entries.slice(0, limit) : entries).map((entry) => entry.kind === 'personal'
+          ? <PersonalTaskRow key={dashboardEntryKey(entry)} task={entry.task} />
+          : <View key={dashboardEntryKey(entry)}>
+            <Pressable testID={'open-project-' + entry.task.projectId + '-' + entry.task.id} accessibilityRole="button" accessibilityLabel={'Open project ' + (projectNames.get(entry.task.projectId) ?? entry.task.projectId)} onPress={() => router.push({ pathname: '/project/[id]', params: { id: entry.task.projectId } })} style={styles.projectLink}>
+              <AppText numberOfLines={2} style={[styles.projectName, { color: colors.mutedForeground }]}>{projectNames.get(entry.task.projectId) ?? 'Project unavailable'}</AppText><Feather name="arrow-up-right" size={16} color={colors.primary} />
             </Pressable>
-          );
-        })}
+            <TaskRow task={entry.task} compact />
+          </View>)}
       </View>
-    </ScrollView>
-  );
+    </View>;
+  };
+  const hidden = !settings.showPersonal && !settings.showProjects;
+  return <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={[styles.content, { paddingTop: Platform.OS === 'web' ? 67 : insets.top + 18, paddingBottom: insets.bottom + 90 }]} showsVerticalScrollIndicator={false}>
+    <View><AppText style={[styles.eyebrow, { color: colors.primary }]}>GULABANI</AppText><AppText accessibilityRole="header" style={styles.title}>Today</AppText><AppText testID="dashboard-date" style={[styles.date, { color: colors.mutedForeground }]}>{formatDate(calendarDate)}</AppText></View>
+    <QuickAdd />
+    {!hydrated ? <AppText style={{ color: colors.mutedForeground }}>Loading your day…</AppText> : <>
+      <View style={styles.summaries}>{summaries.map(({ key, label }) => <View key={key} testID={'count-' + key} accessible accessibilityLabel={label + ': ' + counts[key]} style={[styles.summary, { backgroundColor: key === 'overdue' && counts.overdue ? colors.accent : colors.card, borderColor: colors.border }]}><AppText style={[styles.count, { color: key === 'overdue' && counts.overdue ? colors.accentForeground : colors.foreground }]}>{counts[key]}</AppText><AppText style={[styles.summaryLabel, { color: colors.mutedForeground }]}>{label}</AppText></View>)}</View>
+      {hidden ? <View style={styles.empty}><AppText style={{ color: colors.mutedForeground }}>Tasks are hidden in Settings.</AppText><Pressable accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.viewAll}><AppText style={{ color: colors.primary }}>Open Settings</AppText></Pressable></View> : <>
+        {groups.today.length ? section('today', 'Today') : <AppText testID="empty-today" style={[styles.emptyText, { color: colors.mutedForeground }]}>No tasks due today.</AppText>}
+        {section('overdue', 'Overdue')}
+        {section('upcoming', 'Upcoming', DASHBOARD_LIMIT)}
+        {section('unscheduled', 'No Date', DASHBOARD_LIMIT)}
+        {settings.showCompleted && section('completed', 'Completed Today', DASHBOARD_LIMIT)}
+      </>}
+    </>}
+  </ScrollView>;
 }
-
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 20, gap: 26 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  eyebrow: { fontFamily: 'Inter_700Bold', letterSpacing: 1.5, fontSize: 10, marginBottom: 8 },
-  greeting: { fontFamily: 'Inter_700Bold', fontSize: 28, letterSpacing: -1 },
-  subhead: { fontSize: 13, marginTop: 7 },
-  addButton: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  hero: { borderRadius: 24, padding: 20, minHeight: 190 },
-  heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  nextLabel: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  liveDot: { width: 7, height: 7, borderRadius: 4 },
-  heroLabel: { fontFamily: 'Inter_700Bold', fontSize: 10, letterSpacing: 1.4 },
-  heroTitle: { color: '#FFFFFF', fontFamily: 'Inter_700Bold', fontSize: 25, letterSpacing: -0.6, marginTop: 25 },
-  heroProject: { color: '#AEB8CB', fontFamily: 'Inter_500Medium', fontSize: 13, marginTop: 6 },
-  heroBottom: { marginTop: 25, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  heroDue: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
-  openButton: { flexDirection: 'row', gap: 7, alignItems: 'center', paddingHorizontal: 13, paddingVertical: 10, borderRadius: 12 },
-  openButtonText: { color: '#FFFFFF', fontFamily: 'Inter_600SemiBold', fontSize: 12 },
-  metrics: { flexDirection: 'row', justifyContent: 'space-between' },
-  metric: { flex: 1, gap: 5 },
-  metricValue: { fontFamily: 'Inter_700Bold', fontSize: 23 },
-  metricLabel: { fontSize: 11 },
-  section: { gap: 1 },
-  card: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 14 },
-  empty: { paddingVertical: 24, textAlign: 'center', fontSize: 13 },
-  projectCard: { borderWidth: 1, borderRadius: 18, padding: 15, marginBottom: 10 },
-  projectInfo: { flexDirection: 'row', alignItems: 'center', gap: 11 },
-  projectDot: { width: 9, height: 9, borderRadius: 5 },
-  projectName: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
-  projectClient: { fontSize: 11 },
-  progressLine: { height: 5, borderRadius: 3, backgroundColor: '#EEF0F2', marginTop: 16, overflow: 'hidden' },
-  progressFill: { height: '100%', borderRadius: 3 },
-  projectMeta: { marginTop: 9, flexDirection: 'row', justifyContent: 'space-between' },
+  content: { paddingHorizontal: 20, gap: 22 }, eyebrow: { fontFamily: 'Inter_700Bold', letterSpacing: 1.5, fontSize: 10, marginBottom: 8 },
+  title: { fontFamily: 'Inter_700Bold', fontSize: 30, letterSpacing: -1 }, date: { fontSize: 13, marginTop: 7 },
+  summaries: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, summary: { width: '48%', flexGrow: 1, minHeight: 84, borderWidth: 1, borderRadius: 16, padding: 14, gap: 5 },
+  count: { fontFamily: 'Inter_700Bold', fontSize: 24 }, summaryLabel: { fontSize: 12 },
+  section: { gap: 8 }, sectionHeader: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  sectionTitle: { flexShrink: 1, fontFamily: 'Inter_700Bold', fontSize: 19, letterSpacing: -0.3 }, viewAll: { minHeight: 44, paddingHorizontal: 4, flexDirection: 'row', alignItems: 'center', gap: 3 },
+  card: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 14 }, projectLink: { minHeight: 44, paddingTop: 6, flexDirection: 'row', gap: 8, alignItems: 'center' }, projectName: { flex: 1, fontFamily: 'Inter_500Medium', fontSize: 12 },
+  empty: { alignItems: 'center', gap: 4 }, emptyText: { paddingVertical: 10, textAlign: 'center', fontSize: 13 },
 });

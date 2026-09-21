@@ -21,7 +21,7 @@ export function PersonalTaskRow({ task }: { task: PersonalTask }) {
     <Pressable testID={`edit-personal-${task.id}`} accessibilityRole="button" accessibilityLabel={`Edit ${task.title}`} onPress={() => router.push({ pathname: '/personal-task', params: { id: task.id } })} style={styles.copy}>
       <AppText style={[styles.meta, { color: colors.mutedForeground }]}>Personal · {task.priority}{task.recurrence.frequency !== 'None' ? ` · ${task.recurrence.frequency}` : ''}</AppText>
       <AppText style={[styles.title, { color: done ? colors.mutedForeground : colors.foreground, textDecorationLine: done ? 'line-through' : 'none' }]}>{task.title}</AppText>
-      <AppText style={[styles.meta, { color: !done && days !== null && days < 0 ? colors.primary : colors.mutedForeground }]}>{done ? `Completed ${formatShortDate(task.completedAt ?? task.createdAt)}` : `${due}${task.dueDate ? ` · ${formatShortDate(task.dueDate)}` : ''}${task.dueTime ? ` ${task.dueTime}` : ''}`}</AppText>
+      <AppText style={[styles.meta, { color: !done && days !== null && days < 0 ? colors.primary : colors.mutedForeground }]}>{done ? task.completedAt ? `Completed ${formatShortDate(task.completedAt)}` : 'Completed' : `${due}${task.dueDate ? ` · ${formatShortDate(task.dueDate)}` : ''}${task.dueTime ? ` ${task.dueTime}` : ''}`}</AppText>
     </Pressable>
     <Feather name="edit-2" size={15} color={colors.mutedForeground} />
   </View>;

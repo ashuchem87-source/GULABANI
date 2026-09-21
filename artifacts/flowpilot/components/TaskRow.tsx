@@ -13,11 +13,14 @@ export function TaskRow({ task, compact = false }: { task: ProjectTask; compact?
   const project = projects.find((item) => item.id === task.projectId);
   const remaining = daysRemaining(task.dueDate);
   const isDone = task.status === 'done';
-  const dueLabel = isDone ? `Completed ${formatShortDate(task.completedAt ?? task.dueDate)}` : remaining < 0 ? `${Math.abs(remaining)}d overdue` : remaining === 0 ? 'Due today' : `${remaining}d left`;
+  const dueLabel = isDone ? task.completedAt ? `Completed ${formatShortDate(task.completedAt)}` : 'Completed' : remaining < 0 ? `${Math.abs(remaining)}d overdue` : remaining === 0 ? 'Due today' : `${remaining}d left`;
 
   return (
     <Pressable
       testID={`task-${task.id}`}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: isDone }}
+      accessibilityLabel={`${isDone ? 'Reopen' : 'Complete'} ${task.title}`}
       onPress={() => {
         Haptics.selectionAsync();
         toggleTask(task.id, task.projectId);
@@ -52,6 +55,6 @@ const styles = StyleSheet.create({
   project: { fontSize: 12 },
   due: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5 },
   dueText: { fontFamily: 'Inter_600SemiBold', fontSize: 10 },
-  doneText: { fontFamily: 'Inter_500Medium', fontSize: 11 },
+  doneText: { maxWidth: '45%', fontFamily: 'Inter_500Medium', fontSize: 11 },
   date: { fontSize: 11, minWidth: 45, textAlign: 'right' },
 });

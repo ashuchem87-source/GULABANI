@@ -168,7 +168,6 @@ const makeTasks = (project: Project, template: WorkflowTemplate): ProjectTask[] 
       status: index === 0 && project.id === 'p-northstar' ? 'done' : 'todo',
       dueDate: dueDate.toISOString(),
       order: index,
-      ...(index === 0 && project.id === 'p-northstar' ? { completedAt: dueDate.toISOString() } : {}),
     };
   });
 };
@@ -192,7 +191,7 @@ function recalculateTimeline(project: Project, projectTasks: ProjectTask[]) {
         const completedAt = task.completedAt ?? task.dueDate;
         const completedDate = new Date(completedAt);
         cursor = completedDate;
-        return { ...task, dueDate: completedDate.toISOString(), completedAt: completedDate.toISOString() };
+        return { ...task, dueDate: completedDate.toISOString() };
       }
 
       const dueDate = new Date(cursor);
@@ -245,10 +244,8 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
             startDate: Number.isFinite(readDate(project.startDate).getTime()) ? project.startDate : projectStartDate(project, parsed.tasks).toISOString(),
             remindersEnabled: project.remindersEnabled ?? false,
           }));
-          const storedTasks = parsed.tasks.map((task) => ({
-            ...task,
-            ...(task.status === 'done' ? { completedAt: task.completedAt ?? task.dueDate } : {}),
-          }));
+          // A due date is not evidence of completion. Keep unknown legacy timestamps absent.
+          const storedTasks = parsed.tasks;
           // Loading must not reschedule historical tasks or overwrite deadlines.
           setProjects(storedProjects);
           setTasks(storedTasks);
