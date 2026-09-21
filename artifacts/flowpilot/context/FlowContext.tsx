@@ -1,8 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { scheduleProjectReminders } from '@/lib/notifications';
 import { addCalendarDays, calendarDaysUntil, localDateValue, parseTaskDate, projectStartDate, readDate } from '@/lib/task-utils';
+import { completePersonal, personalFields, validatePersonal, type PersonalInput, type PersonalTask } from '@/lib/personal-tasks';
+import { askPersonalReminderPermission, syncPersonalReminders } from '@/lib/personal-notifications';
 
 export type ReminderFrequency = 'Daily' | 'Every 2 days' | 'Weekly';
 export type TaskStatus = 'todo' | 'done';
@@ -46,6 +48,12 @@ export type ProjectTask = WorkflowStep & {
 };
 
 type FlowContextValue = {
+  personalTasks: PersonalTask[];
+  personalReminderNotice: string;
+  savePersonalTask: (input: PersonalInput, id?: string) => Promise<{ ok: boolean; error?: string }>;
+  completePersonalTask: (id: string) => void;
+  reopenPersonalTask: (id: string) => void;
+  deletePersonalTask: (id: string) => void;
   projects: Project[];
   tasks: ProjectTask[];
   templates: WorkflowTemplate[];
@@ -203,6 +211,9 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   const [projects, setProjects] = useState<Project[]>(starterProjects);
   const [tasks, setTasks] = useState<ProjectTask[]>(starterTasks);
   const [hydrated, setHydrated] = useState(false);
+  const [personalTasks, setPersonalTasks] = useState<PersonalTask[]>([]);
+  const personalRef = useRef<PersonalTask[]>([]);
+  const [personalReminderNotice, setPersonalReminderNotice] = useState('');
   const [calendarDate, setCalendarDate] = useState(localDateValue);
 
   useEffect(() => {
@@ -223,7 +234,9 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.getItem(STORAGE_KEY)
       .then((stored) => {
         if (stored) {
-          const parsed = JSON.parse(stored) as { projects: Project[]; tasks: ProjectTask[]; templates?: WorkflowTemplate[] };
+          const parsed = JSON.parse(stored) as { projects: Project[]; tasks: ProjectTask[]; templates?: WorkflowTemplate[]; personalTasks?: PersonalTask[] };
+          personalRef.current = parsed.personalTasks ?? [];
+          setPersonalTasks(personalRef.current);
           if (parsed.templates) setTemplateList(parsed.templates);
           const storedProjects = parsed.projects.map((project) => ({
             ...project,
@@ -244,9 +257,54 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (hydrated) {
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ projects, tasks, templates: templateList })).catch(() => undefined);
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ projects, tasks, templates: templateList, personalTasks })).catch(() => undefined);
     }
-  }, [hydrated, projects, tasks, templateList]);
+  }, [hydrated, projects, tasks, templateList, personalTasks]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    let active = true;
+    const sync = () => {
+      void syncPersonalReminders(personalRef.current).then((notice) => {
+        if (active) setPersonalReminderNotice(notice ?? '');
+      }).catch(() => { if (active) setPersonalReminderNotice('Personal reminders could not be updated. Check notification permissions and reopen the app to retry.'); });
+    };
+    sync();
+    const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') sync(); });
+    return () => { active = false; subscription.remove(); };
+  }, [hydrated, personalTasks, calendarDate]);
+
+  const changePersonal = (update: (current: PersonalTask[]) => PersonalTask[]) => {
+    personalRef.current = update(personalRef.current);
+    setPersonalTasks(personalRef.current);
+  };
+
+  const savePersonalTask: FlowContextValue['savePersonalTask'] = async (input, id) => {
+    if (!hydrated) return { ok: false, error: 'Please wait for your tasks to load.' };
+    const existing = id ? personalRef.current.find((task) => task.id === id) : undefined;
+    if (id && !existing) return { ok: false, error: 'This personal task no longer exists.' };
+    const error = validatePersonal(input, new Date(), existing?.status === 'done');
+    if (error) return { ok: false, error };
+    let notice: string | undefined;
+    if (input.reminder !== 'None' && existing?.status !== 'done') {
+      try { notice = await askPersonalReminderPermission(); }
+      catch { notice = 'Saved, but notification permission could not be checked. Reopen the app to retry.'; }
+    }
+    if (id && !personalRef.current.some((task) => task.id === id)) return { ok: false, error: 'This personal task was deleted.' };
+    let taskId = id;
+    if (!taskId) {
+      do { taskId = `personal-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`; }
+      while (personalRef.current.some((task) => task.id === taskId) || tasks.some((task) => task.id === taskId) || projects.some((project) => project.id === taskId));
+    }
+    const fields = personalFields(input, existing);
+    const newTask: PersonalTask = { ...fields, id: taskId, status: 'todo', createdAt: new Date().toISOString(), seriesId: taskId, occurrence: 0 };
+    changePersonal((current) => id ? current.map((task) => task.id === id ? { ...task, ...fields } : task) : [...current, newTask]);
+    setPersonalReminderNotice(notice ?? '');
+    return { ok: true };
+  };
+  const completePersonalTask = (id: string) => changePersonal((current) => completePersonal(current, id));
+  const reopenPersonalTask = (id: string) => changePersonal((current) => current.map((task) => task.id === id ? { ...task, status: 'todo', completedAt: undefined } : task));
+  const deletePersonalTask = (id: string) => changePersonal((current) => current.filter((task) => task.id !== id));
 
   const addTemplate = (input: {
     name: string;
@@ -393,8 +451,8 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   };
 
   const value = useMemo(
-    () => ({ projects, tasks, templates: templateList, hydrated, calendarDate, addTemplate, updateTemplate, deleteTemplate, addProject, addManualTask, toggleTask, updateReminderFrequency, enableProjectReminders, deleteProject }),
-    [projects, tasks, templateList, hydrated, calendarDate],
+    () => ({ projects, tasks, templates: templateList, hydrated, calendarDate, personalTasks, personalReminderNotice, savePersonalTask, completePersonalTask, reopenPersonalTask, deletePersonalTask, addTemplate, updateTemplate, deleteTemplate, addProject, addManualTask, toggleTask, updateReminderFrequency, enableProjectReminders, deleteProject }),
+    [projects, tasks, templateList, hydrated, calendarDate, personalTasks, personalReminderNotice],
   );
 
   return <FlowContext.Provider value={value}>{children}</FlowContext.Provider>;

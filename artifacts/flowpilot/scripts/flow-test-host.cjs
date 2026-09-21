@@ -17,6 +17,7 @@ function loadSource(file, mocks = {}, globals = {}) {
       return { jsx, jsxs: jsx, Fragment: 'Fragment' };
     }
     if (name === '@/lib/task-utils') return loadSource('lib/task-utils.ts');
+    if (name === '@/lib/personal-tasks') return loadSource('lib/personal-tasks.ts');
     throw new Error(`Missing test mock: ${name}`);
   } });
   return module.exports;
@@ -26,6 +27,11 @@ function host(storage, { mocks = {}, globals = {} } = {}) {
   const state = [], deps = [];
   let cursor = 0, effectCursor = 0, effects = [];
   const react = {
+    useRef: (initial) => {
+      const index = cursor++;
+      if (!(index in state)) state[index] = { current: initial };
+      return state[index];
+    },
     createContext: () => ({ Provider: 'Provider' }),
     useState: (initial) => {
       const index = cursor++;
@@ -47,6 +53,7 @@ function host(storage, { mocks = {}, globals = {} } = {}) {
       setItem: async (key, value) => { assert.equal(key, 'flowpilot-state-v1'); storage.value = value; },
     },
     '@/lib/notifications': { scheduleProjectReminders: async () => true },
+    '@/lib/personal-notifications': { askPersonalReminderPermission: async () => undefined, syncPersonalReminders: async () => undefined },
     ...mocks,
   }, { setTimeout: () => 0, clearTimeout: () => {}, ...globals });
   return async () => {

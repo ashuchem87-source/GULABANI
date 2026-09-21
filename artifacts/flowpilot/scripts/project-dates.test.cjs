@@ -209,13 +209,14 @@ test('calendar picker selects a real leap day and cancel keeps the selected date
 });
 
 test('midnight and app resume refresh date-dependent UI without changing saved data', async () => {
-  let date = '2026-09-21', timer, onState;
+  let date = '2026-09-21', timer;
+  const stateListeners = new Set();
   const storage = {};
   const utilities = loadSource('lib/task-utils.ts');
   const render = host(storage, {
     mocks: {
       '@/lib/task-utils': { ...utilities, localDateValue: () => date },
-      'react-native': { AppState: { addEventListener: (_event, callback) => { onState = callback; return { remove() {} }; } } },
+      'react-native': { AppState: { addEventListener: (_event, callback) => { stateListeners.add(callback); return { remove() { stateListeners.delete(callback); } }; } } },
     },
     globals: { setTimeout: (callback, delay) => { timer = callback; assert.ok(delay > 0 && delay <= 26 * 3600000); return 1; } },
   });
@@ -224,7 +225,7 @@ test('midnight and app resume refresh date-dependent UI without changing saved d
   assert.equal(flow.calendarDate, date);
   date = '2026-09-22'; timer(); flow = await render();
   assert.equal(flow.calendarDate, date);
-  date = '2026-09-25'; onState('active'); flow = await render();
+  date = '2026-09-25'; stateListeners.forEach((callback) => callback('active')); flow = await render();
   assert.equal(flow.calendarDate, date);
   assert.equal(storage.value, stored);
 });

@@ -133,11 +133,14 @@ test('To-do screen actually renders manual tasks alongside workflow tasks', () =
   const manual = { id: 'manual-test', projectId: 'a', title: 'Extra', status: 'todo', dueDate: '2026-01-01', isManual: true };
   const normal = { id: 'step', projectId: 'b', title: 'Workflow', status: 'todo', dueDate: '2026-01-02' };
   const { default: TasksScreen } = loadSource('app/(tabs)/tasks.tsx', {
+    react: { useState: (value) => [value, () => {}] },
+    'expo-router': { router: {} },
+    '@/components/PersonalTaskRow': { PersonalTaskRow: 'PersonalTaskRow' },
     '@expo/vector-icons': { Feather: 'Feather' },
     'react-native': { Platform: { OS: 'web' }, ScrollView: 'ScrollView', View: 'View', StyleSheet: { create: (value) => value } },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
     '@/components/AppText': { AppText: 'AppText' }, '@/components/TaskRow': { TaskRow: 'TaskRow' },
-    '@/context/FlowContext': { useFlow: () => ({ tasks: [normal, manual] }), daysRemaining: () => 1 },
+    '@/context/FlowContext': { useFlow: () => ({ tasks: [normal, manual], personalTasks: [] }), daysRemaining: () => 1 },
     '@/hooks/useColors': { useColors: () => ({}) },
   });
   const found = [];

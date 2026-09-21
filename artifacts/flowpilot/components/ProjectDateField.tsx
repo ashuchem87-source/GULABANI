@@ -6,7 +6,7 @@ import { useColors } from '@/hooks/useColors';
 import { localDateValue, parseTaskDate } from '@/lib/task-utils';
 
 // Calendar UI uses only existing React Native components; no native module needed.
-export function ProjectDateField({ value, onChange }: { value: string; onChange: (date: string) => void }) {
+export function ProjectDateField({ value, onChange, label = 'PROJECT START DATE / ALLOCATION DATE', optional = false }: { value: string; onChange: (date: string) => void; label?: string; optional?: boolean }) {
   const colors = useColors();
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState(() => parseTaskDate(value) ?? new Date());
@@ -16,15 +16,16 @@ export function ProjectDateField({ value, onChange }: { value: string; onChange:
   const choose = (date: Date) => { onChange(localDateValue(date)); setOpen(false); };
   const shiftMonth = (amount: number) => setMonth((current) => new Date(current.getFullYear(), current.getMonth() + amount, 1));
   return <View style={{ gap: 7 }}>
-    <AppText style={styles.label}>PROJECT START DATE / ALLOCATION DATE</AppText>
+    <AppText style={styles.label}>{label}</AppText>
     <View style={[styles.field, { backgroundColor: colors.card, borderColor: colors.input }]}>
-      <TextInput testID="project-start-date" accessibilityLabel="Project start date, YYYY-MM-DD" value={value} onChangeText={onChange} placeholder="YYYY-MM-DD" placeholderTextColor={colors.mutedForeground} maxLength={10} autoCapitalize="none" style={[styles.input, { color: colors.foreground }]} />
-      <Pressable testID="open-project-calendar" accessibilityRole="button" accessibilityLabel="Choose project start date" onPress={() => { setMonth(parseTaskDate(value) ?? new Date()); setOpen(true); }} style={styles.icon}><Feather name="calendar" size={20} color={colors.primary} /></Pressable>
+      <TextInput testID="project-start-date" accessibilityLabel={`${label}, YYYY-MM-DD`} value={value} onChangeText={onChange} placeholder="YYYY-MM-DD" placeholderTextColor={colors.mutedForeground} maxLength={10} autoCapitalize="none" style={[styles.input, { color: colors.foreground }]} />
+      <Pressable testID="open-project-calendar" accessibilityRole="button" accessibilityLabel={`Choose ${label.toLowerCase()}`} onPress={() => { setMonth(parseTaskDate(value) ?? new Date()); setOpen(true); }} style={styles.icon}><Feather name="calendar" size={20} color={colors.primary} /></Pressable>
     </View>
-    <AppText style={[styles.hint, { color: parseTaskDate(value) ? colors.mutedForeground : colors.destructive }]}>{parseTaskDate(value) ? 'Choose a date or enter YYYY-MM-DD. Past and future dates are allowed.' : 'Enter a valid date as YYYY-MM-DD.'}</AppText>
+    {optional && <Pressable accessibilityRole="button" onPress={() => onChange('')} style={styles.action}><AppText style={{ color: colors.primary }}>No due date</AppText></Pressable>}
+    <AppText style={[styles.hint, { color: parseTaskDate(value) || (optional && !value) ? colors.mutedForeground : colors.destructive }]}>{optional && !value ? 'No due date selected.' : parseTaskDate(value) ? 'Choose a date or enter YYYY-MM-DD. Past and future dates are allowed.' : 'Enter a valid date as YYYY-MM-DD.'}</AppText>
     <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
       <View style={styles.overlay}><View accessibilityViewIsModal style={[styles.dialog, { backgroundColor: colors.card }]}>
-        <AppText style={styles.title}>Project start date</AppText>
+        <AppText style={styles.title}>{optional ? 'Due date' : 'Project start date'}</AppText>
         <View style={styles.navigation}>
           <Pressable accessibilityLabel="Previous month" accessibilityRole="button" onPress={() => shiftMonth(-1)} style={styles.icon}><Feather name="chevron-left" size={22} color={colors.primary} /></Pressable>
           <AppText accessibilityLiveRegion="polite" style={styles.month}>{new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' }).format(first)}</AppText>
