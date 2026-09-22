@@ -18,9 +18,12 @@ export function projectStatus(project: Project, tasks: ProjectTask[]): ProjectSt
 }
 export function isArchived(project: Project): boolean { return project.archived === true; }
 export function availableProjects(projects: Project[]) { return projects.filter((project) => !isArchived(project)); }
-export function visibleProjects(projects: Project[], tasks: ProjectTask[], archived: boolean, showCompleted: boolean) {
-  return projects.filter((project) => isArchived(project) === archived &&
-    (archived || showCompleted || projectStatus(project, tasks) !== 'Completed'));
+export type ProjectView = 'Active' | 'Completed' | 'Archived';
+export function projectView(project: Project, tasks: ProjectTask[]): ProjectView {
+  return isArchived(project) ? 'Archived' : projectStatus(project, tasks) === 'Completed' ? 'Completed' : 'Active';
+}
+export function visibleProjects(projects: Project[], tasks: ProjectTask[], view: ProjectView = 'Active') {
+  return projects.filter((project) => projectView(project, tasks) === view);
 }
 export function normalProjectTasks(tasks: ProjectTask[], projects: Project[] = []) {
   const archivedIds = new Set(projects.filter(isArchived).map((project) => project.id));

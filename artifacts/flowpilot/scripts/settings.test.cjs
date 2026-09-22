@@ -123,7 +123,7 @@ test('completed visibility and both-hidden empty states work with all filters',(
 });
 test('To-do screen consumes settings, keeps Add To-do and explains hidden filters',()=>{
   const prefs=settings({showPersonal:false}), h=ui('app/(tabs)/tasks.tsx',{tasks:projectTasks,personalTasks},prefs);
-  let tree=h.render(); assert.equal(walk(tree,n=>n.type==='PersonalTaskRow').length,0); assert.equal(walk(tree,n=>n.type==='TaskRow').length,2); assert.ok(find(tree,'add-personal-todo'));
+  let tree=h.render(); assert.equal(walk(tree,n=>n.type==='PersonalTaskRow').length,0); assert.equal(walk(tree,n=>n.type==='TaskRow').length,0); find(tree,'todo-status-Completed').props.onPress(); tree=h.render(); assert.equal(walk(tree,n=>n.type==='TaskRow').length,1); assert.ok(find(tree,'add-personal-todo'));
   find(tree,'todo-filter-Personal').props.onPress(); tree=h.render(); assert.match(content(tree),/Personal tasks are hidden in Settings/);
   prefs.showProjects=false; find(tree,'todo-filter-All').props.onPress(); assert.match(content(h.render()),/Enable them in Settings/);
 });
@@ -147,7 +147,7 @@ test('System Light Dark resolve correctly and all palette token names match',()=
 test('Settings renders all sections, config version/build and expandable Help',()=>{
   const h=ui('app/(tabs)/settings.tsx'); let tree=h.render(); const text=content(tree);
   for(const heading of ['General','Notifications','To-do Preferences','Project Preferences','Appearance','About GULABANI','Help','9.8.7','123']) assert.ok(text.includes(heading),heading);
-  assert.ok(text.includes('Controls completed projects in the Active list'));
+  assert.equal(find(tree,'showCompletedProjects'),undefined); assert.equal(find(tree,'showCompleted'),undefined);
   const button=walk(tree,n=>n.type==='Pressable'&&content(n)==='Projects ')[0] ?? walk(tree,n=>n.type==='Pressable'&&content(n).trim()==='Projects')[0]; assert.ok(button); button.props.onPress(); tree=h.render(); assert.match(content(tree),/Create a project from a template/);
 });
 function notifications({ failAt } = {}) {

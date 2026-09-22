@@ -62,7 +62,7 @@ function PersonalForm({ task }: { task?: PersonalTask }) {
       <AppText style={[styles.hint, { color: colors.mutedForeground }]}>Daily repeat works with or without a date or time. Undated daily tasks create the next occurrence for tomorrow. Weekly and Monthly need an anchor date. Reopening keeps that next occurrence; edits and deletion affect only this occurrence.</AppText>
       {!!error && <AppText accessibilityRole="alert" style={{ color: colors.destructive }}>{error}</AppText>}
       <Pressable testID="save-personal-task" accessibilityRole="button" disabled={busy} onPress={save} style={[styles.button, { backgroundColor: colors.action, opacity: busy ? 0.5 : 1 }]}><AppText style={styles.buttonText}>{busy ? 'Saving…' : 'Save To-do'}</AppText></Pressable>
-      {!!task && <Pressable testID="delete-personal-task" disabled={busy} accessibilityRole="button" onPress={() => setConfirmDelete(true)} style={styles.button}><AppText style={{ color: colors.destructive }}>Delete To-do</AppText></Pressable>}
+      {!!task && <Pressable testID="delete-personal-task" disabled={busy} accessibilityRole="button" accessibilityLabel="Delete Task" onPress={() => setConfirmDelete(true)} style={styles.button}><AppText style={{ color: colors.destructive }}>Delete Task</AppText></Pressable>}
     </ScrollView>
     <Modal visible={showTime} transparent animationType="fade" onRequestClose={() => setShowTime(false)}><View style={styles.overlay}><View accessibilityViewIsModal style={[styles.dialog, { backgroundColor: colors.card, maxHeight: '80%' }]}>
       <AppText style={styles.heading}>Choose due time</AppText>
@@ -70,9 +70,9 @@ function PersonalForm({ task }: { task?: PersonalTask }) {
       <Pressable accessibilityRole="button" onPress={() => setShowTime(false)} style={styles.button}><AppText>Cancel</AppText></Pressable>
     </View></View></Modal>
     <Modal visible={confirmDelete} transparent animationType="fade" onRequestClose={() => setConfirmDelete(false)}><View style={styles.overlay}><View accessibilityViewIsModal style={[styles.dialog, { backgroundColor: colors.card }]}>
-      <AppText style={styles.heading}>Delete this personal to-do?</AppText><AppText style={styles.hint}>This occurrence will be permanently deleted. Other occurrences and project tasks will be kept.</AppText>
+      <AppText style={styles.heading}>Delete this task?</AppText><AppText style={styles.hint}>This action cannot be undone. Only this occurrence will be deleted. Other occurrences and project tasks will be kept.</AppText>
       <Pressable accessibilityRole="button" onPress={() => setConfirmDelete(false)} style={styles.button}><AppText>Cancel</AppText></Pressable>
-      <Pressable testID="confirm-delete-personal" accessibilityRole="button" onPress={() => { if (task) deletePersonalTask(task.id); setConfirmDelete(false); router.replace('/tasks'); }} style={[styles.button, { backgroundColor: colors.dangerAction }]}><AppText style={styles.buttonText}>Delete</AppText></Pressable>
+      <Pressable testID="confirm-delete-personal" accessibilityRole="button" accessibilityLabel="Confirm Delete Task" onPress={() => { if (task) deletePersonalTask(task.id); setConfirmDelete(false); router.replace('/tasks'); }} style={[styles.button, { backgroundColor: colors.dangerAction }]}><AppText style={styles.buttonText}>Delete</AppText></Pressable>
     </View></View></Modal>
   </KeyboardAvoidingView>;
 }

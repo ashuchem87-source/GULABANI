@@ -17,7 +17,7 @@ function loadSource(file, mocks = {}, globals = {}) {
       return { jsx, jsxs: jsx, Fragment: 'Fragment' };
     }
     if (name === '@/lib/project-management') return loadSource('lib/project-management.ts');
-    if (['@/lib/template-sync', '@/lib/data-backup', '@/lib/data-export', '@/lib/data-storage'].includes(name)) return loadSource(name.replace('@/', '') + '.ts', mocks, globals);
+    if (['@/lib/todo-view', '@/lib/template-sync', '@/lib/data-backup', '@/lib/data-export', '@/lib/data-storage'].includes(name)) return loadSource(name.replace('@/', '') + '.ts', mocks, globals);
     if (name === '@/components/DataManagement') return { DataManagement: 'DataManagement' };
     if (name === '@/components/DataRecovery') return { DataRecovery: 'DataRecovery' };
     if (name === '@/hooks/useColors') return { useColors: () => loadSource('constants/colors.ts').default.light };

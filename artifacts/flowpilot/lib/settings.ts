@@ -12,6 +12,7 @@ export const OPTIONS = {
 } as const;
 export type Settings = { [K in keyof typeof OPTIONS]: (typeof OPTIONS)[K][number] } & {
   notificationsEnabled: boolean; showPersonal: boolean; showProjects: boolean;
+  // Retained for old settings/backups. Dedicated Completed views ignore these.
   showCompleted: boolean; projectDuration: number; showCompletedProjects: boolean;
 };
 export const DEFAULT_SETTINGS: Settings = {
@@ -76,8 +77,8 @@ export function todoEmptyMessage(settings: Settings, filter: string) {
 }
 export const HELP = {
   'Data & Backup': 'Create Backup saves a restorable JSON file with your data and preferences. Restore replaces current data only after confirmation. Save a backup first. Excel-compatible CSV is for reporting and cannot restore the app. Files are saved to the folder you select; you can share them from Android Files.',
-  Projects: 'Create a project from a template to generate its workflow tasks. Use Add Task inside a project for an extra task with its own due date.',
+  Projects: 'Create a project from a template to generate its workflow tasks. Use Add Task inside a project for an extra task with its own due date. Active, Completed and Archived separate project records without deleting history.',
   Templates: 'Create, rename or delete templates and their steps. Hold a step to drag it into a new position. Saving a master template updates linked projects. Existing dates and completed history are protected; manual tasks stay independent.',
-  'To-do': 'Add To-do creates a personal task without a project. All, Personal and Projects filter the list. Tap the completion circle to finish or reopen a task. Tap a personal task to edit it. Completing a repeating personal task creates its next occurrence.',
+  'To-do': 'Add To-do creates a personal task without a project. Open shows overdue work, today and the next 7 calendar days, with undated personal work under Unscheduled. Completed keeps finished records. All, Personal and Projects filter either view. Tap the completion circle to finish or reopen a task. Tap a personal task or its pencil to edit it; Delete Task in the edit form asks for confirmation. Completing a repeating personal task creates its next occurrence.',
   Reminders: 'Personal reminders need a time. Without a date they use the next eligible local time. Daily repeat can omit a date; Weekly and Monthly need an anchor date. Project reminders follow the project cadence. Enable Notifications here and allow notifications in Android settings. Turning notifications off keeps your saved reminder choices.',
 };

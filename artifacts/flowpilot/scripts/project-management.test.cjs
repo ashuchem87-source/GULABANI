@@ -58,8 +58,8 @@ test('archive requires confirmation and preserves complete project history and s
   const {archived,...rest}=plain(flow.projects[0]);assert.deepEqual(rest,before.projects[0]);
 });
 test('unarchive preserves status and restores project/task visibility',async()=>{
-  const h=setup();let flow=await h.render();flow.setProjectArchived('p',true,true);flow=await h.render();assert.equal(pm.visibleProjects(flow.projects,flow.tasks,false,true).length,0);assert.equal(pm.visibleProjects(flow.projects,flow.tasks,true,false).length,1);assert.equal(pm.normalProjectTasks(flow.tasks,flow.projects).length,0);
-  flow.setProjectArchived('p',false);flow=await h.render();assert.equal(flow.projects[0].status,'Active');assert.equal(pm.visibleProjects(flow.projects,flow.tasks,false,true).length,1);assert.equal(pm.normalProjectTasks(flow.tasks,flow.projects).length,2);
+  const h=setup();let flow=await h.render();flow.setProjectArchived('p',true,true);flow=await h.render();assert.equal(pm.visibleProjects(flow.projects,flow.tasks,'Active').length,0);assert.equal(pm.visibleProjects(flow.projects,flow.tasks,'Archived').length,1);assert.equal(pm.normalProjectTasks(flow.tasks,flow.projects).length,0);
+  flow.setProjectArchived('p',false);flow=await h.render();assert.equal(flow.projects[0].status,'Active');assert.equal(pm.visibleProjects(flow.projects,flow.tasks,'Active').length,1);assert.equal(pm.normalProjectTasks(flow.tasks,flow.projects).length,2);
 });
 test('archived project status is frozen during completion/reopening and manual additions are rejected',async()=>{
   const h=setup();let flow=await h.render();flow.setProjectArchived('p',true,true);assert.equal(flow.addManualTask('p',{title:'Blocked',dueDate:today}),false);flow=await h.render();flow.toggleTask('manual','p');flow=await h.render();assert.equal(flow.projects[0].status,'Active');assert.equal(pm.projectProgress('p',flow.tasks).percent,100);
@@ -75,9 +75,9 @@ test('all metadata and derived fields remain separate; legacy hydration does not
 test('invalid status or missing project operations leave storage unchanged',async()=>{
   const h=setup();let flow=await h.render();const before=h.storage.value;assert.equal(flow.setProjectStatus('p','Invalid'),false);assert.equal(flow.setProjectArchived('missing',true,true),false);flow=await h.render();assert.equal(h.storage.value,before);
 });
-for(const show of [true,false])test('Show Completed Projects '+show+' controls only non-archived list',()=>{
+for(const show of [true,false])test('Legacy completed preference '+show+' does not merge separate project categories',()=>{
   const projects=[{...project,status:'Completed'},{...project,id:'active',status:'Active'},{...project,id:'archived',status:'Completed',archived:true}];const before=JSON.stringify(projects);
-  assert.deepEqual(ids(pm.visibleProjects(projects,[],false,show)),show?['p','active']:['active']);assert.deepEqual(ids(pm.visibleProjects(projects,[],true,show)),['archived']);assert.equal(JSON.stringify(projects),before);
+  assert.deepEqual(ids(pm.visibleProjects(projects,[],'Active')),['active']);assert.deepEqual(ids(pm.visibleProjects(projects,[],'Completed')),['p']);assert.deepEqual(ids(pm.visibleProjects(projects,[],'Archived')),['archived']);assert.equal(JSON.stringify(projects),before);
 });
 for(const [label,change,tasks,expected] of [
   ['future deadline',{},[],'On Track'],['overdue task',{},[task('late','todo',{dueDate:'2020-01-01',isManual:true})],'Attention Needed'],
@@ -114,10 +114,10 @@ test('archive dialog requires confirmation, can cancel, and Unarchive restores p
  find(render(),'archive-project').props.onPress();assert.match(text(render()),/All data is kept/);assert.equal(flow.projects[0].archived,undefined);find(render(),'cancel-project-management').props.onPress();flow=await h.render();assert.equal(flow.projects[0].archived,undefined);
  find(render(),'archive-project').props.onPress();find(render(),'confirm-project-archive').props.onPress();flow=await h.render();assert.equal(flow.projects[0].archived,true);assert.equal(find(render(),'archive-project').props.accessibilityLabel,'Unarchive Project');find(render(),'archive-project').props.onPress();flow=await h.render();assert.equal(flow.projects[0].archived,false);assert.equal(flow.projects[0].status,'On Hold');
 });
-test('Projects screen toggles Active/Archived, respects completed visibility and keeps creation available',()=>{
+test('Projects screen separates Active/Completed/Archived, ignores legacy visibility and keeps creation available',()=>{
  const data={...state({projects:[{...project,status:'Completed'},{...project,id:'archived',archived:true,status:'Completed'}]}),calendarDate:today};const preferences=prefs({showCompletedProjects:false}),view=ui('app/(tabs)/projects.tsx',data,preferences);
- let tree=view.render();assert.equal(find(tree,'project-card-p'),undefined);assert.match(text(find(tree,'projects-empty')),/hidden in Settings/);assert.ok(walk(tree,n=>n.props?.accessibilityLabel==='New Project')[0]);
- preferences.showCompletedProjects=true;tree=view.render();assert.ok(find(tree,'project-card-p'));assert.equal(find(tree,'project-card-archived'),undefined);
+ let tree=view.render();assert.equal(find(tree,'project-card-p'),undefined);assert.match(text(find(tree,'projects-empty')),/No active projects/);assert.ok(walk(tree,n=>n.props?.accessibilityLabel==='New Project')[0]);
+ preferences.showCompletedProjects=true;tree=view.render();assert.equal(find(tree,'project-card-p'),undefined);find(tree,'projects-completed').props.onPress();preferences.showCompletedProjects=false;tree=view.render();assert.ok(find(tree,'project-card-p'));assert.equal(find(tree,'project-card-archived'),undefined);
  find(tree,'projects-archived').props.onPress();preferences.showCompletedProjects=false;tree=view.render();assert.ok(find(tree,'project-card-archived'));assert.equal(find(tree,'project-card-p'),undefined);
  find(tree,'project-card-archived').props.onPress();assert.deepEqual(plain(view.navigation),[{pathname:'/project/[id]',params:{id:'archived'}}]);
 });
@@ -136,10 +136,10 @@ test('archive/unarchive updates Home and every To-do filter, leaving personal ta
  const h=setup();let flow=await h.render();const home=ui('app/(tabs)/index.tsx',()=>flow),todo=ui('app/(tabs)/tasks.tsx',()=>flow);assert.equal(find(home.render(),'count-today').props.accessibilityLabel,'Today: 2');
  const personals=JSON.stringify(flow.personalTasks);flow.setProjectArchived('p',true,true);flow=await h.render();assert.equal(find(home.render(),'count-today').props.accessibilityLabel,'Today: 1');assert.equal(walk(todo.render(),n=>n.type==='TaskRow').length,0);assert.equal(walk(todo.render(),n=>n.type==='PersonalTaskRow').length,1);
  find(todo.render(),'todo-filter-Projects').props.onPress();assert.equal(walk(todo.render(),n=>n.type==='TaskRow'||n.type==='PersonalTaskRow').length,0);
- flow.setProjectArchived('p',false);flow=await h.render();assert.equal(walk(todo.render(),n=>n.type==='TaskRow').length,2);assert.equal(find(home.render(),'count-today').props.accessibilityLabel,'Today: 2');assert.equal(JSON.stringify(flow.personalTasks),personals);
+ flow.setProjectArchived('p',false);flow=await h.render();assert.equal(walk(todo.render(),n=>n.type==='TaskRow').length,1);assert.equal(find(home.render(),'count-today').props.accessibilityLabel,'Today: 2');assert.equal(JSON.stringify(flow.personalTasks),personals);
 });
 test('Completed but non-archived unfinished work stays on Home/To-do when completed projects are hidden',async()=>{
- const h=setup();let flow=await h.render();flow.setProjectStatus('p','Completed',true);flow=await h.render();const preferences=prefs({showCompletedProjects:false});const home=ui('app/(tabs)/index.tsx',()=>flow,preferences),todo=ui('app/(tabs)/tasks.tsx',()=>flow,preferences);assert.equal(find(home.render(),'count-today').props.accessibilityLabel,'Today: 2');assert.equal(walk(todo.render(),n=>n.type==='TaskRow').length,2);
+ const h=setup();let flow=await h.render();flow.setProjectStatus('p','Completed',true);flow=await h.render();const preferences=prefs({showCompletedProjects:false});const home=ui('app/(tabs)/index.tsx',()=>flow,preferences),todo=ui('app/(tabs)/tasks.tsx',()=>flow,preferences);assert.equal(find(home.render(),'count-today').props.accessibilityLabel,'Today: 2');assert.equal(walk(todo.render(),n=>n.type==='TaskRow').length,1);
 });
 for(const screen of ['app/(tabs)/index.tsx','app/(tabs)/tasks.tsx'])test(screen+' row completion updates project progress/status/health through centralized logic',async()=>{
  const h=setup(state({tasks:[task('last','todo',{isManual:true})]}));let flow=await h.render();const view=ui(screen,()=>flow),row=walk(view.render(),n=>n.type==='TaskRow')[0];const taskUI=ui('components/TaskRow.tsx',()=>flow);find(taskUI.render(row.props),'task-last').props.onPress();flow=await h.render();assert.equal(pm.projectProgress('p',flow.tasks).percent,100);assert.equal(flow.projects[0].status,'Completed');assert.equal(pm.projectHealth(flow.projects[0],flow.tasks,flow.calendarDate),'Completed');

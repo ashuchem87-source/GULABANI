@@ -12,8 +12,8 @@ import { OPTIONS, HELP, parseDuration, type Settings } from '@/lib/settings';
 const sections: { title: string; rows: { key: keyof Settings; label: string; hint?: string }[] }[] = [
   { title: 'General', rows: [{ key: 'startScreen', label: 'Default Start Screen', hint: 'Used on a fresh launch. Links keep their destination.' }, { key: 'dateFormat', label: 'Date Format' }, { key: 'firstDayOfWeek', label: 'First Day of Week' }] },
   { title: 'Notifications', rows: [{ key: 'notificationsEnabled', label: 'Notifications' }, { key: 'defaultReminder', label: 'Default Reminder', hint: 'For new personal tasks with a date and time.' }] },
-  { title: 'To-do Preferences', rows: [{ key: 'showPersonal', label: 'Show Personal Tasks' }, { key: 'showProjects', label: 'Show Project Tasks' }, { key: 'showCompleted', label: 'Show Completed Tasks' }, { key: 'defaultPriority', label: 'Default Priority' }] },
-  { title: 'Project Preferences', rows: [{ key: 'projectDuration', label: 'Default Project Duration', hint: 'For new projects only. Choose 1–3650 days.' }, { key: 'showCompletedProjects', label: 'Show Completed Projects', hint: 'Controls completed projects in the Active list. Archived projects have their own view.' }] },
+  { title: 'To-do Preferences', rows: [{ key: 'showPersonal', label: 'Show Personal Tasks' }, { key: 'showProjects', label: 'Show Project Tasks' }, { key: 'defaultPriority', label: 'Default Priority' }] },
+  { title: 'Project Preferences', rows: [{ key: 'projectDuration', label: 'Default Project Duration', hint: 'For new projects only. Choose 1–3650 days.' }] },
   { title: 'Appearance', rows: [{ key: 'theme', label: 'Theme' }] },
 ];
 export default function SettingsScreen() {
