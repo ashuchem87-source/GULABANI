@@ -2,7 +2,10 @@ import { PROJECT_STATUSES, projectProgress, projectStatus, transitionProject, is
 import { useSettings } from '@/context/SettingsContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, AppState } from 'react-native';
+import { Alert, AppState, Modal, Pressable, Text, View } from 'react-native';
+import { FLOW_KEY, dataLocked, dataGeneration, writeData, replaceData, recoverData, type RestoreResult } from '@/lib/data-storage';
+import { parseBackup, snapshotData, type AppData, type Backup } from '@/lib/data-backup';
+import { useColors } from '@/hooks/useColors';
 import { dependencyIds, getIncompleteDependencies, removeTaskAndDependencies, validateDependencies, validateRescheduleProposal, type RescheduleProposal } from '@/lib/workflow-intelligence';
 import { scheduleProjectReminders, syncProjectReminders } from '@/lib/notifications';
 import { addCalendarDays, calendarDaysUntil, localDateValue, parseTaskDate, projectStartDate, readDate } from '@/lib/task-utils';
@@ -54,6 +57,9 @@ export type ProjectTask = WorkflowStep & {
 };
 
 type FlowContextValue = {
+  getDataSnapshot: () => AppData;
+  restoreBackup: (backup: Backup) => Promise<RestoreResult & { warning?: string }>;
+  storageError: string;
   personalTasks: PersonalTask[];
   personalReminderNotice: string;
   savePersonalTask: (input: PersonalInput, id?: string) => Promise<{ ok: boolean; error?: string }>;
@@ -188,7 +194,7 @@ const starterTasks = starterProjects.flatMap((project) => {
 });
 
 const FlowContext = createContext<FlowContextValue | null>(null);
-const STORAGE_KEY = 'flowpilot-state-v1';
+const STORAGE_KEY = FLOW_KEY;
 
 function recalculateTimeline(project: Project, projectTasks: ProjectTask[]) {
   let cursor = projectStartDate(project, projectTasks);
@@ -217,7 +223,12 @@ function recalculateTimeline(project: Project, projectTasks: ProjectTask[]) {
 }
 
 export function FlowProvider({ children }: { children: React.ReactNode }) {
-  const { settings } = useSettings();
+  const { settings, getSettingsSnapshot, acceptRestoredSettings } = useSettings();
+  const colors = useColors();
+  const [storageError, setStorageError] = useState('');
+  const [restoring, setRestoring] = useState(false), [recoveryRequired, setRecoveryRequired] = useState(false);
+  const generation = dataGeneration();
+  const mutable = () => !dataLocked() && generation === dataGeneration();
   const [templateList, setTemplateList] = useState<WorkflowTemplate[]>(templates);
   const [projects, setProjects] = useState<Project[]>(starterProjects);
   const [tasks, setTasks] = useState<ProjectTask[]>(starterTasks);
@@ -261,19 +272,22 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
           setTasks(storedTasks);
         }
       })
-      .finally(() => setHydrated(true));
+      .then(() => setHydrated(true))
+      .catch(() => setStorageError('Saved data could not be loaded. Close and reopen the app to retry. Your saved data has not been replaced.'));
   }, []);
 
   useEffect(() => {
     if (hydrated) {
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ projects, tasks, templates: templateList, personalTasks })).catch(() => undefined);
+      void writeData(STORAGE_KEY, JSON.stringify({ projects, tasks, templates: templateList, personalTasks }))
+        .then(() => setStorageError('')).catch(() => { if (!dataLocked()) setStorageError('Changes could not be saved. Keep the app open and retry saving before closing.'); });
     }
   }, [hydrated, projects, tasks, templateList, personalTasks]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || dataLocked()) return;
     let active = true;
     const sync = () => {
+      if (dataLocked()) return;
       void syncPersonalReminders(personalRef.current, settings.notificationsEnabled).then((notice) => {
         if (active) setPersonalReminderNotice(notice ?? '');
       }).catch(() => { if (active) setPersonalReminderNotice('Personal reminders could not be updated. Check notification permissions and reopen the app to retry.'); });
@@ -286,8 +300,9 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   const projectSnapshot = useRef({ projects, tasks });
   projectSnapshot.current = { projects, tasks };
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || dataLocked()) return;
     const sync = () => {
+      if (dataLocked()) return;
       const latest = projectSnapshot.current;
       void syncProjectReminders(latest.projects, latest.tasks, settings.notificationsEnabled)
         .catch(() => setPersonalReminderNotice('Project reminders could not be updated. Reopen the app to retry.'));
@@ -298,11 +313,13 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   }, [hydrated, settings.notificationsEnabled, calendarDate]);
 
   const changePersonal = (update: (current: PersonalTask[]) => PersonalTask[]) => {
+    if (!mutable()) return;
     personalRef.current = update(personalRef.current);
     setPersonalTasks(personalRef.current);
   };
 
   const savePersonalTask: FlowContextValue['savePersonalTask'] = async (input, id) => {
+    if (!mutable()) return { ok: false, error: 'Data changed or recovery is in progress. Reopen this form.' };
     if (!hydrated) return { ok: false, error: 'Please wait for your tasks to load.' };
     const existing = id ? personalRef.current.find((task) => task.id === id) : undefined;
     if (id && !existing) return { ok: false, error: 'This personal task no longer exists.' };
@@ -313,6 +330,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
       try { notice = await askPersonalReminderPermission(); }
       catch { notice = 'Saved, but notification permission could not be checked. Reopen the app to retry.'; }
     }
+    if (!mutable()) return { ok: false, error: 'Data was replaced while this form was open. Please reopen it.' };
     if (id && !personalRef.current.some((task) => task.id === id)) return { ok: false, error: 'This personal task was deleted.' };
     let taskId = id;
     if (!taskId) {
@@ -335,6 +353,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
     description: string;
     steps: WorkflowStep[];
   }) => {
+    if (!mutable()) return;
     if (!input.name.trim() || !input.steps.length || input.steps.some((step) => !step.title.trim())) return;
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const palette = ['#F26B5E', '#6BAF92', '#6F83C9', '#B787C8'];
@@ -352,6 +371,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateTemplate: FlowContextValue['updateTemplate'] = (id, input) => {
+    if (!mutable()) return;
     if (!input.name.trim() || !input.steps.length || input.steps.some((step) => !step.title.trim())) return;
     // Project tasks are independent snapshots; only the template collection changes.
     setTemplateList((current) => current.map((template) => template.id === id ? {
@@ -364,6 +384,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteTemplate = (id: string) => {
+    if (!mutable()) return;
     setTemplateList((current) => current.filter((template) => template.id !== id));
   };
 
@@ -383,6 +404,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
     projectStartDate?: string;
     reminderFrequency: ReminderFrequency;
   }) => {
+    if (!mutable()) return false;
     const selectedStart = parseTaskDate(input.projectStartDate ?? localDateValue());
     if (!selectedStart || !Number.isFinite(readDate(input.dueDate).getTime())) return false;
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -408,6 +430,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addManualTask: FlowContextValue['addManualTask'] = (projectId, input) => {
+    if (!mutable()) return false;
     const { projects, tasks } = projectSnapshot.current;
     const project = projects.find((item) => item.id === projectId);
     const dueDate = parseTaskDate(input.dueDate);
@@ -427,6 +450,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   };
 
   const setTaskDependencies: FlowContextValue['setTaskDependencies'] = (projectId, taskId, ids) => {
+    if (!mutable()) return 'Data changed or recovery is in progress. Reopen this project.';
     const { projects, tasks } = projectSnapshot.current;
     const project = projects.find((item) => item.id === projectId);
     const task = tasks.find((item) => item.projectId === projectId && item.id === taskId);
@@ -437,6 +461,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteProjectTask: FlowContextValue['deleteProjectTask'] = (projectId, taskId, confirmed = false) => {
+    if (!mutable()) return false;
     const { projects, tasks } = projectSnapshot.current;
     const project = projects.find((item) => item.id === projectId);
     if (!hydrated || !confirmed || !project || isArchived(project) || !tasks.some((task) => task.projectId === projectId && task.id === taskId)) return false;
@@ -450,6 +475,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   };
 
   const applyReschedule: FlowContextValue['applyReschedule'] = (proposal, extendDeadline = false) => {
+    if (!mutable()) return 'Data changed or recovery is in progress. Reopen this project.';
     const { projects, tasks } = projectSnapshot.current;
     const project = projects.find((item) => item.id === proposal.projectId);
     if (!hydrated || !project) return 'This project is unavailable.';
@@ -465,6 +491,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleTask = (taskId: string, projectId?: string, override = false) => {
+    if (!mutable()) return;
     const { projects, tasks } = projectSnapshot.current;
     const task = tasks.find((item) => item.id === taskId && (!projectId || item.projectId === projectId));
     const project = task ? projects.find((item) => item.id === task.projectId) : undefined;
@@ -515,6 +542,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateReminderFrequency = (projectId: string, frequency: ReminderFrequency) => {
+    if (!mutable()) return;
     const { projects, tasks } = projectSnapshot.current;
     const project = projects.find((item) => item.id === projectId);
     if (!project) return;
@@ -524,6 +552,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   };
 
   const enableProjectReminders = async (projectId: string) => {
+    if (!mutable()) return false;
     const { projects, tasks } = projectSnapshot.current;
     const project = projects.find((item) => item.id === projectId);
     if (!project || isArchived(project)) return false;
@@ -533,6 +562,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   };
 
   const setProjectStatus: FlowContextValue['setProjectStatus'] = (projectId, status, confirmIncomplete = false) => {
+    if (!mutable()) return false;
     const { projects, tasks } = projectSnapshot.current;
     const project = projects.find((item) => item.id === projectId);
     if (!hydrated || !project || !PROJECT_STATUSES.includes(status)) return false;
@@ -542,6 +572,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   };
 
   const setProjectArchived: FlowContextValue['setProjectArchived'] = (projectId, archived, confirmed = false) => {
+    if (!mutable()) return false;
     const { projects, tasks } = projectSnapshot.current;
     const project = projects.find((item) => item.id === projectId);
     if (!hydrated || !project || (archived && !confirmed)) return false;
@@ -555,17 +586,54 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteProject = (projectId: string) => {
+    if (!mutable()) return;
     const { projects, tasks } = projectSnapshot.current;
     void syncProjectReminders(projects.filter((project) => project.id !== projectId), tasks, settings.notificationsEnabled).catch(() => setPersonalReminderNotice('Project reminders could not be updated. Reopen the app to retry.'));
     commitProjectState(projects.filter((project) => project.id !== projectId), tasks.filter((task) => task.projectId !== projectId));
   };
 
+  const getDataSnapshot = (): AppData => snapshotData({ ...projectSnapshot.current, templates: templateList, personalTasks: personalRef.current, settings: getSettingsSnapshot() });
+  const restoreBackup: FlowContextValue['restoreBackup'] = async (backup) => {
+    if (!hydrated || restoring || !mutable()) return { ok: false, error: 'Please wait for data to finish loading or saving.' };
+    let validated: Backup;
+    try { validated = parseBackup(JSON.stringify(backup)); }
+    catch (error) { return { ok: false, error: error instanceof Error ? error.message : 'Invalid backup.' }; }
+    setRestoring(true);
+    const previous = getDataSnapshot();
+    const result = await replaceData(validated.data, (data) => {
+      commitProjectState(data.projects, data.tasks); setTemplateList(data.templates);
+      personalRef.current = data.personalTasks; setPersonalTasks(data.personalTasks);
+      acceptRestoredSettings(data.settings); setStorageError('');
+    }, previous);
+    if (result.recoveryRequired) { setRecoveryRequired(true); setRestoring(false); return result; }
+    let warning: string | undefined;
+    if (result.ok) {
+      // Reconciliation cancels old dataset IDs and rebuilds only eligible reminders.
+      // Permission denial is a warning, never a failed data restore.
+      const data = validated.data;
+      const results = await Promise.allSettled([
+        syncProjectReminders(data.projects, data.tasks, data.settings.notificationsEnabled),
+        syncPersonalReminders(data.personalTasks, data.settings.notificationsEnabled),
+      ]);
+      if (results.some((r) => r.status === 'rejected' || (r.status === 'fulfilled' && r.value))) warning = 'Data restored. Some reminders could not be updated. Check notification permission and reopen the app to retry.';
+    }
+    setRestoring(false);
+    return { ...result, warning };
+  };
   const value = useMemo(
-    () => ({ projects, tasks, templates: templateList, hydrated, calendarDate, personalTasks, personalReminderNotice, savePersonalTask, completePersonalTask, reopenPersonalTask, deletePersonalTask, addTemplate, updateTemplate, deleteTemplate, addProject, addManualTask, toggleTask, setTaskDependencies, deleteProjectTask, applyReschedule, updateReminderFrequency, enableProjectReminders, deleteProject, setProjectStatus, setProjectArchived }),
-    [projects, tasks, templateList, hydrated, calendarDate, personalTasks, personalReminderNotice, settings.notificationsEnabled],
+    () => ({ projects, tasks, templates: templateList, hydrated, calendarDate, personalTasks, personalReminderNotice, savePersonalTask, completePersonalTask, reopenPersonalTask, deletePersonalTask, addTemplate, updateTemplate, deleteTemplate, addProject, addManualTask, toggleTask, setTaskDependencies, deleteProjectTask, applyReschedule, updateReminderFrequency, enableProjectReminders, deleteProject, setProjectStatus, setProjectArchived, getDataSnapshot, restoreBackup, storageError }),
+    [projects, tasks, templateList, hydrated, calendarDate, personalTasks, personalReminderNotice, settings, storageError, restoring, generation],
   );
 
-  return <FlowContext.Provider value={value}>{children}</FlowContext.Provider>;
+  return <FlowContext.Provider value={value}>{children}
+    <Modal visible={restoring || recoveryRequired || !!storageError} transparent animationType="fade" onRequestClose={() => {}}>
+      <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.45)' }}><View accessibilityViewIsModal style={{ backgroundColor: colors.card, padding: 24, borderRadius: 16, gap: 12 }}>
+        <Text accessibilityRole="alert" style={{ color: colors.foreground }}>{recoveryRequired ? 'Restore needs recovery. Your previous data is protected. Retry before continuing.' : storageError || 'Restoring your data…'}</Text>
+        {recoveryRequired && <Pressable accessibilityRole="button" accessibilityLabel="Retry data recovery" style={{ minHeight: 48, justifyContent: 'center' }} onPress={() => { void recoverData().then(() => { setRecoveryRequired(false); setStorageError(''); }).catch(() => {}); }}><Text style={{ color: colors.primary }}>Retry Recovery</Text></Pressable>}
+        {!!storageError && hydrated && !recoveryRequired && <Pressable accessibilityRole="button" style={{ minHeight: 48, justifyContent: 'center' }} onPress={() => { const { settings: omitted, ...data } = getDataSnapshot(); void writeData(STORAGE_KEY, JSON.stringify(data)).then(() => setStorageError('')).catch(() => {}); }}><Text style={{ color: colors.primary }}>Retry Saving</Text></Pressable>}
+      </View></View>
+    </Modal>
+  </FlowContext.Provider>;
 }
 
 export function useFlow() {

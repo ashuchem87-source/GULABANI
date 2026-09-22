@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
   kicker: { fontFamily: 'Inter_700Bold', letterSpacing: 1.5, fontSize: 10, marginBottom: 8 },
   title: { fontFamily: 'Inter_700Bold', fontSize: 30, letterSpacing: -1 },
   subtitle: { fontSize: 13, marginTop: 5 },
-  add: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  add: { width: 48, height: 48, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   project: { borderWidth: 1, borderRadius: 20, padding: 17, marginBottom: 2 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   dot: { width: 9, height: 9, borderRadius: 5 },

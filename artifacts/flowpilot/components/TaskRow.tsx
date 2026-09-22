@@ -51,10 +51,10 @@ export function TaskRow({ task, compact = false }: { task: ProjectTask; compact?
 }
 
 const styles = StyleSheet.create({
-  row: { minHeight: 70, paddingVertical: 13, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  row: { minHeight: 70, paddingVertical: 13, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12 },
   compact: { minHeight: 62 },
   checkbox: { width: 24, height: 24, borderRadius: 8, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  copy: { flex: 1, gap: 5 },
+  copy: { flex: 1, minWidth: 100, gap: 5 },
   title: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
   project: { fontSize: 12 },
   due: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5 },

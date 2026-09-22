@@ -5,7 +5,7 @@ import { projectProgress, projectStatus, projectHealth, isArchived } from '@/lib
 import { useDateFormatter, useSettings } from '@/context/SettingsContext';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText } from '@/components/AppText';
 import { TaskRow } from '@/components/TaskRow';
@@ -27,7 +27,7 @@ export default function ProjectDetailScreen() {
   const template = templates.find((item) => item.id === project.templateId);
   return (
     <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={[styles.content, { paddingTop: Platform.OS === 'web' ? 24 : insets.top + 14, paddingBottom: insets.bottom + 50 }]} showsVerticalScrollIndicator={false}>
-      <View style={styles.top}><Pressable onPress={() => router.back()} hitSlop={10}><Feather name="arrow-left" size={22} color={colors.foreground} /></Pressable><Pressable onPress={() => { deleteProject(project.id); router.replace('/projects'); }} hitSlop={10}><Feather name="trash-2" size={18} color={colors.mutedForeground} /></Pressable></View>
+      <View style={styles.top}><Pressable accessibilityRole="button" accessibilityLabel="Back to projects" style={{ minWidth: 48, minHeight: 48, justifyContent: 'center' }} onPress={() => router.back()} hitSlop={10}><Feather name="arrow-left" size={22} color={colors.foreground} /></Pressable><Pressable accessibilityRole="button" accessibilityLabel="Delete project" style={{ minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }} onPress={() => Alert.alert('Delete project?', 'This permanently deletes this project and its tasks. Your templates and personal To-dos will be kept.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete Project', style: 'destructive', onPress: () => { deleteProject(project.id); router.replace('/projects'); } }])} hitSlop={10}><Feather name="trash-2" size={18} color={colors.mutedForeground} /></Pressable></View>
       <View style={styles.titleRow}><View style={[styles.projectDot, { backgroundColor: colors.primary }]} /><View style={{ flex: 1 }}><AppText style={styles.title}>{project.name}</AppText><AppText style={[styles.client, { color: colors.mutedForeground }]}>{project.client}</AppText></View></View>
       <AppText style={[styles.summary, { color: colors.mutedForeground }]}>{project.summary}</AppText>
       <AppText style={{ color: colors.mutedForeground }}>{archived ? 'Archived · ' : ''}{projectStatus(project, projectTasks)} · {projectHealth(project, projectTasks, calendarDate)}</AppText>
@@ -65,12 +65,12 @@ const styles = StyleSheet.create({
   metaLabel: { fontFamily: 'Inter_700Bold', letterSpacing: 1.2, fontSize: 9, marginBottom: 7 },
   metaValue: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
   reminderOptions: { flexDirection: 'row', gap: 5 },
-  reminderButton: { borderRadius: 7, paddingHorizontal: 7, paddingVertical: 4 },
+  reminderButton: { borderRadius: 7, minWidth: 44, minHeight: 44, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 7, paddingVertical: 4 },
   reminderText: { fontFamily: 'Inter_600SemiBold', fontSize: 10 },
   reminderCard: { borderRadius: 15, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
   reminderTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
   reminderDescription: { fontSize: 11, lineHeight: 17, marginTop: 3 },
-  stepHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 2 },
+  stepHeader: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'baseline', marginTop: 2 },
   stepsTitle: { fontFamily: 'Inter_700Bold', fontSize: 19 },
   stepCount: { fontSize: 11 },
   card: { borderWidth: 1, borderRadius: 18, paddingHorizontal: 14 },

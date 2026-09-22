@@ -119,6 +119,10 @@ export function syncProjectReminders(projects: Project[], tasks: ProjectTask[], 
       if (!masterEnabled || !projects.some((project) => project.id === id && project.remindersEnabled && project.archived !== true)) await cancelProjectReminders(id);
     }
     if (!masterEnabled) return;
-    for (const project of projects) if (project.remindersEnabled && project.archived !== true) await schedule(project, tasks, false);
+    let denied = false;
+    for (const project of projects) if (project.remindersEnabled && project.archived !== true) {
+      if (!await schedule(project, tasks, false)) denied = true;
+    }
+    return denied ? 'Some project reminders could not be scheduled. Check notification permission.' : undefined;
   });
 }

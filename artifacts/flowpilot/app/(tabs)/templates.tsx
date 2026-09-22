@@ -16,7 +16,7 @@ export default function TemplatesScreen() {
   return (
     <>
     <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={[styles.content, { paddingTop: Platform.OS === 'web' ? 67 : insets.top + 18, paddingBottom: insets.bottom + 90 }]} showsVerticalScrollIndicator={false}>
-      <View style={styles.header}><View><AppText style={[styles.kicker, { color: colors.primary }]}>YOUR SYSTEM</AppText><AppText style={styles.title}>Templates</AppText><AppText style={[styles.subtitle, { color: colors.mutedForeground }]}>Make the right next step automatic.</AppText></View><Pressable testID="add-template" onPress={() => router.push('/new-template')} style={[styles.add, { backgroundColor: colors.foreground }]}><Feather name="plus" size={20} color={colors.background} /></Pressable></View>
+      <View style={styles.header}><View><AppText style={[styles.kicker, { color: colors.primary }]}>YOUR SYSTEM</AppText><AppText style={styles.title}>Templates</AppText><AppText style={[styles.subtitle, { color: colors.mutedForeground }]}>Make the right next step automatic.</AppText></View><Pressable testID="add-template" accessibilityRole="button" accessibilityLabel="Create template" onPress={() => router.push('/new-template')} style={[styles.add, { backgroundColor: colors.foreground }]}><Feather name="plus" size={20} color={colors.background} /></Pressable></View>
       {hydrated && templates.length === 0 && <AppText style={{ color: colors.mutedForeground }}>No templates yet. Tap + to create your first template.</AppText>}
       {hydrated && templates.map((template) => (
         <View key={template.id} style={[styles.template, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
   kicker: { fontFamily: 'Inter_700Bold', letterSpacing: 1.5, fontSize: 10, marginBottom: 8 },
   title: { fontFamily: 'Inter_700Bold', fontSize: 30, letterSpacing: -1 },
   subtitle: { fontSize: 13, marginTop: 5 },
-  add: { width: 42, height: 42, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  add: { width: 48, height: 48, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   template: { borderWidth: 1, borderRadius: 20, padding: 17, marginBottom: 3 },
   templateHeader: { flexDirection: 'row', alignItems: 'center', gap: 11 },
   templateIcon: { width: 38, height: 38, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
@@ -67,5 +67,5 @@ const styles = StyleSheet.create({
   step: { flexDirection: 'row', alignItems: 'center', gap: 9 },
   stepNumber: { width: 23, height: 23, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   stepNumberText: { fontFamily: 'Inter_700Bold', fontSize: 10 },
-  stepName: { fontFamily: 'Inter_500Medium', fontSize: 12 },
+  stepName: { flex: 1, fontFamily: 'Inter_500Medium', fontSize: 12, lineHeight: 18 },
 });

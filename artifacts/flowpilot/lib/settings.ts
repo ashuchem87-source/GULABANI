@@ -75,6 +75,7 @@ export function todoEmptyMessage(settings: Settings, filter: string) {
   return 'Your work is clear for now.';
 }
 export const HELP = {
+  'Data & Backup': 'Create Backup saves a restorable JSON file with your data and preferences. Restore replaces current data only after confirmation. Save a backup first. Excel-compatible CSV is for reporting and cannot restore the app. Files are saved to the folder you select; you can share them from Android Files.',
   Projects: 'Create a project from a template to generate its workflow tasks. Use Add Task inside a project for an extra task with its own due date.',
   Templates: 'Create, rename or delete templates and their steps. Hold a step to drag it into a new position. Existing projects keep their own tasks.',
   'To-do': 'Add To-do creates a personal task without a project. All, Personal and Projects filter the list. Tap the completion circle to finish or reopen a task. Tap a personal task to edit it. Completing a repeating personal task creates its next occurrence.',

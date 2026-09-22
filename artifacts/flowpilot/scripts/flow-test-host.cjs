@@ -10,13 +10,17 @@ function loadSource(file, mocks = {}, globals = {}) {
       target: ts.ScriptTarget.ES2020, esModuleInterop: true },
   }).outputText;
   const module = { exports: {} };
-  vm.runInNewContext(compiled, { ...globals, exports: module.exports, module, require: (name) => {
+  vm.runInNewContext(compiled, { Error, ...globals, exports: module.exports, module, require: (name) => {
     if (name in mocks) return mocks[name];
     if (name === 'react/jsx-runtime') {
       const jsx = (type, props) => ({ type, props });
       return { jsx, jsxs: jsx, Fragment: 'Fragment' };
     }
     if (name === '@/lib/project-management') return loadSource('lib/project-management.ts');
+    if (['@/lib/data-backup', '@/lib/data-export', '@/lib/data-storage'].includes(name)) return loadSource(name.replace('@/', '') + '.ts', mocks, globals);
+    if (name === '@/components/DataManagement') return { DataManagement: 'DataManagement' };
+    if (name === '@/components/DataRecovery') return { DataRecovery: 'DataRecovery' };
+    if (name === '@/hooks/useColors') return { useColors: () => loadSource('constants/colors.ts').default.light };
     if (name === '@/lib/workflow-intelligence') return loadSource('lib/workflow-intelligence.ts');
     if (name === '@/components/WorkflowIntelligence') return { WorkflowSummary: 'WorkflowSummary', TaskWorkflowActions: 'TaskWorkflowActions' };
     if (name === '@/components/ProjectManagement') return { ProjectManagement: 'ProjectManagement' };

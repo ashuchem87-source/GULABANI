@@ -19,6 +19,7 @@ import {
 import { Stack, router, usePathname, useRootNavigationState } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { FlowProvider } from '@/context/FlowContext';
+import { DataRecovery } from '@/components/DataRecovery';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -70,7 +71,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
-        <SettingsProvider><FlowProvider>
+        <DataRecovery><SettingsProvider><FlowProvider>
           <QueryClientProvider client={queryClient}>
             <GestureHandlerRootView style={{ flex: 1 }}>
               <KeyboardProvider>
@@ -78,7 +79,7 @@ export default function RootLayout() {
               </KeyboardProvider>
             </GestureHandlerRootView>
           </QueryClientProvider>
-        </FlowProvider></SettingsProvider>
+        </FlowProvider></SettingsProvider></DataRecovery>
       </ErrorBoundary>
     </SafeAreaProvider>
   );

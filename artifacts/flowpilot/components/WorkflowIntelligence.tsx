@@ -33,9 +33,9 @@ export function TaskWorkflowActions({ project, task }: { project: Project; task:
   if (project.archived) return null;
   const candidates = tasks.filter((other) => other.projectId === project.id && other.id !== task.id);
   const blockers = getIncompleteDependencies(task, tasks);
-  const downstream = getDownstreamTasks(task, tasks);
-  const impacted = downstream.filter((other) => other.status !== 'done');
   const delay = overdueDays(task, calendarDate);
+  const downstream = delay > 0 ? getDownstreamTasks(task, tasks) : [];
+  const impacted = downstream.filter((other) => other.status !== 'done');
   const directCount = candidates.filter((other) => dependencyIds(other).includes(task.id)).length;
   const dateLabel = (date: string) => Number.isFinite(readDate(date).getTime()) ? formatDate(date) : 'No valid due date';
   const close = () => { setDialog(null); setProposal(null); setError(''); setExtend(false); };

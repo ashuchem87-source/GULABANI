@@ -4,6 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText } from '@/components/AppText';
+import { DataManagement } from '@/components/DataManagement';
 import { useColors } from '@/hooks/useColors';
 import { useSettings } from '@/context/SettingsContext';
 import { OPTIONS, HELP, parseDuration, type Settings } from '@/lib/settings';
@@ -37,6 +38,7 @@ export default function SettingsScreen() {
           : <Pressable key={key} testID={key} accessibilityRole="button" accessibilityLabel={label + ', ' + value} onPress={() => { setSelection(key); setDuration(String(settings.projectDuration)); setInvalid(''); }} style={[styles.row, { borderBottomColor: colors.border }]}>{text}<AppText style={[styles.value, { color: colors.primary }]}>{value}{key === 'projectDuration' ? ' days' : ''}</AppText><Feather name="chevron-right" size={16} color={colors.mutedForeground} /></Pressable>;
       })}</View>
     </View>)}
+    <DataManagement />
     <View style={styles.section}><AppText style={[styles.label, { color: colors.mutedForeground }]}>About GULABANI</AppText><View style={[styles.card, styles.about, { backgroundColor: colors.card, borderColor: colors.border }]}><AppText>{config?.name ?? 'GULABANI'}</AppText><AppText style={styles.hint}>Version {config?.version ?? 'Not available'}</AppText>{build != null && <AppText style={styles.hint}>Build {build}</AppText>}</View></View>
     <View style={styles.section}><AppText style={[styles.label, { color: colors.mutedForeground }]}>Help</AppText><View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>{Object.entries(HELP).map(([title, body]) => <View key={title}><Pressable accessibilityRole="button" accessibilityState={{ expanded: help === title }} onPress={() => setHelp(help === title ? null : title)} style={styles.row}><AppText style={{ flex: 1 }}>{title}</AppText><Feather name={help === title ? 'chevron-up' : 'chevron-down'} size={18} color={colors.primary} /></Pressable>{help === title && <AppText style={[styles.help, { color: colors.mutedForeground }]}>{body}</AppText>}</View>)}</View></View>
     <Modal visible={selection !== null} transparent animationType="fade" onRequestClose={() => setSelection(null)}><View style={styles.overlay}><View accessibilityViewIsModal style={[styles.dialog, { backgroundColor: colors.card }]}><ScrollView keyboardShouldPersistTaps="handled">
