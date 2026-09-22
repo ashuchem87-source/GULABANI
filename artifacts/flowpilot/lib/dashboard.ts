@@ -1,5 +1,5 @@
 import type { ProjectTask } from '@/context/FlowContext';
-import { TODO_DEFAULTS, type PersonalTask, type TodoEntry } from '@/lib/personal-tasks';
+import { personalDay, TODO_DEFAULTS, type PersonalTask, type TodoEntry } from '@/lib/personal-tasks';
 import { calendarDaysUntil, readDate } from '@/lib/task-utils';
 
 export const DASHBOARD_LIMIT = 5;
@@ -13,8 +13,9 @@ export function dashboardBucket(entry: TodoEntry, today: Date): DashboardBucket 
     return task.completedAt && calendarDaysUntil(task.completedAt, today) === 0 ? 'completed' : null;
   }
   if (task.status !== 'todo') return null;
-  if (!task.dueDate) return entry.kind === 'personal' ? 'unscheduled' : null;
-  const days = calendarDaysUntil(task.dueDate, today);
+  const day = entry.kind === 'personal' ? personalDay(entry.task, today) : task.dueDate;
+  if (!day) return entry.kind === 'personal' ? 'unscheduled' : null;
+  const days = calendarDaysUntil(day, today);
   if (!Number.isFinite(days)) return null;
   return days < 0 ? 'overdue' : days > 0 ? 'upcoming' : 'today';
 }
@@ -28,7 +29,8 @@ export function dashboardGroups(projectTasks: ProjectTask[], personalTasks: Pers
   // Decorate once for sorting; preserve stored order for all ties and unscheduled work.
   const decorated = entries.map((entry, index) => {
     const time = entry.kind === 'personal' ? entry.task.dueTime : undefined;
-    return { entry, index, day: entry.task.dueDate ? calendarDaysUntil(entry.task.dueDate, today) : Infinity,
+    const day = entry.kind === 'personal' ? personalDay(entry.task, today) : entry.task.dueDate;
+    return { entry, index, day: day ? calendarDaysUntil(day, today) : Infinity,
       time: time && /^([01]\d|2[0-3]):[0-5]\d$/.test(time) ? Number(time.slice(0, 2)) * 60 + Number(time.slice(3)) : Infinity,
       completed: readDate(entry.task.completedAt).getTime(), bucket: dashboardBucket(entry, today) };
   });

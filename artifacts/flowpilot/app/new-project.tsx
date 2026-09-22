@@ -2,7 +2,7 @@ import { useSettings } from '@/context/SettingsContext';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText } from '@/components/AppText';
@@ -24,17 +24,22 @@ export default function NewProjectScreen() {
   const [days, setDays] = useState(() => String(settings.projectDuration));
   const [startDate, setStartDate] = useState(() => localDateValue());
   const [frequency, setFrequency] = useState<ReminderFrequency>('Daily');
+  const submitting = useRef(false);
+  const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const selectedTemplate = useMemo(() => templates.find((template) => template.id === templateId) ?? templates[0], [templateId, templates]);
   const parsedStart = parseTaskDate(startDate);
   const deadlineDays = Number(days);
   const canSave = name.trim().length > 1 && client.trim().length > 1 && !!selectedTemplate?.steps.length && !!parsedStart && Number.isInteger(deadlineDays) && deadlineDays >= 1 && Number.isFinite(addCalendarDays(parsedStart, deadlineDays).getTime());
   const save = async () => {
-    if (!canSave || !selectedTemplate || !parsedStart) return;
+    if (submitting.current || !canSave || !selectedTemplate || !parsedStart) return;
+    submitting.current = true; setBusy(true); setError('');
+    try {
     const dueDate = addCalendarDays(parsedStart, deadlineDays);
     const created = await addProject({ name: name.trim(), client: client.trim(), summary: summary.trim() || 'A new project ready to move through your system.', templateId: selectedTemplate.id, projectStartDate: localDateValue(parsedStart), dueDate: dueDate.toISOString(), reminderFrequency: frequency });
-    if (!created) return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    router.replace('/projects');
+    if (!created) { setError('Unable to create this project. Check the form and try again.'); submitting.current = false; setBusy(false); return; }
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    router.dismissTo('/projects');
+    } catch { setError('Unable to create this project. Please try again.'); submitting.current = false; setBusy(false); }
   };
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -53,7 +58,8 @@ export default function NewProjectScreen() {
         <View style={styles.inlineFields}><View style={{ flex: 1 }}><AppText style={styles.label}>DEADLINE IN</AppText><View style={[styles.input, { borderColor: colors.input, backgroundColor: colors.card }]}><TextInput value={days} onChangeText={setDays} keyboardType="number-pad" style={[styles.inputText, { color: colors.foreground }]} /><AppText style={[styles.suffix, { color: colors.mutedForeground }]}>days</AppText></View></View><View style={{ flex: 1.3 }}><AppText style={styles.label}>REMIND ME</AppText><View style={styles.frequencyRow}>{(['Daily', 'Every 2 days', 'Weekly'] as ReminderFrequency[]).map((item) => <Pressable key={item} onPress={() => setFrequency(item)} style={[styles.frequency, { backgroundColor: frequency === item ? colors.foreground : colors.card, borderColor: frequency === item ? colors.foreground : colors.border }]}><AppText style={[styles.frequencyText, { color: frequency === item ? colors.background : colors.foreground }]}>{item === 'Every 2 days' ? '2d' : item === 'Daily' ? '1d' : '7d'}</AppText></Pressable>)}</View></View></View>
         <AppText style={[styles.previewText, { color: colors.mutedForeground }]}>The project deadline is this many calendar days after the start date. Workflow step durations run in sequence from that same start date.</AppText>
         <View style={[styles.preview, { backgroundColor: colors.secondary }]}><Feather name="zap" size={16} color={colors.primary} /><View style={{ flex: 1 }}><AppText style={styles.previewTitle}>{selectedTemplate ? `${selectedTemplate.name} is ready` : 'Create a template first'}</AppText><AppText style={[styles.previewText, { color: colors.mutedForeground }]}>{selectedTemplate ? `${selectedTemplate.steps.length} steps will be assigned automatically, starting with “${selectedTemplate.steps[0]?.title ?? ''}”.` : 'Add a template in the Templates tab before creating a project.'}</AppText></View></View>
-        <Pressable testID="save-project" disabled={!canSave} onPress={save} style={({ pressed }) => [styles.save, { backgroundColor: canSave ? colors.action : colors.input, opacity: pressed ? 0.78 : 1 }]}><AppText style={styles.saveText}>Create project</AppText><Feather name="arrow-right" size={17} color="#FFFFFF" /></Pressable>
+        <AppText accessibilityRole="alert" style={{ color: colors.destructive }}>{error}</AppText>
+        <Pressable testID="save-project" accessibilityRole="button" accessibilityState={{ disabled: !canSave || busy, busy }} disabled={!canSave || busy} onPress={save} style={({ pressed }) => [styles.save, { backgroundColor: canSave && !busy ? colors.action : colors.input, opacity: pressed ? 0.78 : 1 }]}><AppText style={styles.saveText}>{busy ? 'Creating…' : 'Create project'}</AppText><Feather name="arrow-right" size={17} color="#FFFFFF" /></Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );

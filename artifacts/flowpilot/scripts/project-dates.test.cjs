@@ -45,7 +45,7 @@ test('10 days means start + 10 calendar days; later step durations are cumulativ
   assert.deepEqual(plain(dates), ['2026-10-01', '2026-10-03']);
 });
 
-test('same template shifts with start date; later template edits and reload preserve existing projects', async () => {
+test('same template shifts with start date; later template edits synchronize metadata but preserve dates after reload', async () => {
   const storage = {}, render = host(storage);
   let flow = await render();
   await create(flow, '2026-09-21', 'First'); flow = await render();
@@ -61,7 +61,9 @@ test('same template shifts with start date; later template edits and reload pres
   flow = await render();
   flow = await host(storage)();
   assert.deepEqual(plain(flow.projects), snapshot.projects);
-  assert.deepEqual(plain(flow.tasks), snapshot.tasks);
+  const expected = snapshot.tasks.map((task) => flow.projects.find((project) => project.id === task.projectId)?.templateId === template.id
+    ? { ...task, duration: 99, order: template.steps.length - 1 - task.order } : task);
+  assert.deepEqual([...plain(flow.tasks)].sort((a,b)=>a.id.localeCompare(b.id)), expected.sort((a,b)=>a.id.localeCompare(b.id)));
 });
 
 test('legacy startDate fallback and deliberately stored task/deadline dates survive hydration', async () => {
@@ -162,9 +164,9 @@ test('New Project defaults to today and submits selected calendar date plus rela
       const index = cursor++;
       if (!(index in state)) state[index] = typeof initial === 'function' ? initial() : initial;
       return [state[index], (value) => { state[index] = value; }];
-    }, useMemo: (fn) => fn() },
-    '@expo/vector-icons': { Feather: 'Feather' }, 'expo-haptics': { notificationAsync: () => {}, NotificationFeedbackType: { Success: 'success' } },
-    'expo-router': { router: { replace() {}, back() {} }, useLocalSearchParams: () => ({}) },
+    }, useMemo: (fn) => fn(), useRef: (value) => ({ current: value }) },
+    '@expo/vector-icons': { Feather: 'Feather' }, 'expo-haptics': { notificationAsync: async () => {}, NotificationFeedbackType: { Success: 'success' } },
+    'expo-router': { router: { dismissTo() {}, replace() {}, back() {} }, useLocalSearchParams: () => ({}) },
     'react-native': { Platform: { OS: 'web' }, KeyboardAvoidingView: 'View', Pressable: 'Pressable', ScrollView: 'ScrollView', TextInput: 'TextInput', View: 'View', StyleSheet: { create: (value) => value } },
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0 }) },
     '@/components/AppText': { AppText: 'AppText' }, '@/components/ProjectDateField': { ProjectDateField: 'DateField' },

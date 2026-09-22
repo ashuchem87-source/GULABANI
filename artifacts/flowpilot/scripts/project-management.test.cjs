@@ -28,7 +28,7 @@ test('unknown status values safely derive fallback without rewriting input',()=>
 for(const status of pm.PROJECT_STATUSES)test('manual '+status+' survives reload without changing dates, tasks, templates or personal work',async()=>{
   const h=setup(),before=JSON.parse(h.storage.value);let flow=await h.render();assert.equal(flow.setProjectStatus('p',status,true),true);flow=await h.render();flow=await host(h.storage)();assert.equal(flow.projects[0].status,status);
   assert.deepEqual(plain(flow.tasks),before.tasks);assert.deepEqual(plain(flow.personalTasks),before.personalTasks);assert.deepEqual(plain(flow.templates),before.templates);
-  const {status:ignored,...rest}=plain(flow.projects[0]);assert.deepEqual(rest,before.projects[0]);
+  const {status:ignored,completionSource,...rest}=plain(flow.projects[0]);assert.equal(completionSource,status==='Completed'?'manual':undefined);assert.deepEqual(rest,before.projects[0]);
 });
 test('incomplete manual Completed requires confirmation and keeps real progress',async()=>{
   const h=setup();let flow=await h.render();assert.equal(flow.setProjectStatus('p','Completed'),false);flow=await h.render();assert.equal(pm.projectStatus(flow.projects[0],flow.tasks),'Active');

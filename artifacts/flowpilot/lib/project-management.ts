@@ -43,5 +43,5 @@ export function transitionProject(project: Project, before: ProjectTask[], after
   let next = status;
   if (event === 'complete' && progress.total > 0 && progress.incomplete === 0) next = 'Completed';
   else if ((event === 'reopen' || event === 'add') && status === 'Completed') next = 'Active';
-  return next === status ? project : { ...project, status: next };
+  return next === status ? project : { ...project, status: next, completionSource: next === 'Completed' ? 'auto' : undefined };
 }

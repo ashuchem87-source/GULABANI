@@ -21,6 +21,7 @@ export default function NewTemplateScreen() {
 function TemplateForm({ template }: { template?: WorkflowTemplate }) {
   const scrollRef = useRef<ScrollView>(null);
   const scrollMetrics = useRef<ScrollMetrics>({ offset: 0, height: 0, contentHeight: 0, top: 0 });
+  const [error, setError] = useState('');
   const [dragging, setDragging] = useState(false);
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -32,7 +33,7 @@ function TemplateForm({ template }: { template?: WorkflowTemplate }) {
     { id: 'step-1', title: '', description: '', duration: 1 },
     { id: 'step-2', title: '', description: '', duration: 1 },
   ]);
-  const canSave = name.trim().length > 0 && steps.length > 0 && steps.every((step) => step.title.trim().length > 0);
+  const canSave = name.trim().length > 0 && steps.length > 0 && steps.every((step) => step.title.trim().length > 0 && Number.isInteger(step.duration) && step.duration >= 0);
 
   const updateStep = (id: string, title: string) => {
     setSteps((current) => current.map((step) => (step.id === id ? { ...step, title } : step)));
@@ -54,9 +55,9 @@ function TemplateForm({ template }: { template?: WorkflowTemplate }) {
       description: description.trim() || 'A reusable project flow for your work.',
       steps: steps.map((step) => ({ ...step, title: step.title.trim() })),
     };
-    if (template) updateTemplate(template.id, input);
-    else addTemplate(input);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const saved = template ? updateTemplate(template.id, input) : addTemplate(input);
+    if (saved === false) { setError('Unable to save and synchronize this template. Check step durations and try again.'); return; }
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     router.replace('/templates');
   };
 
@@ -69,8 +70,9 @@ function TemplateForm({ template }: { template?: WorkflowTemplate }) {
         contentContainerStyle={[styles.content, { paddingTop: Platform.OS === 'web' ? 24 : insets.top + 14, paddingBottom: insets.bottom + 34 }]} keyboardShouldPersistTaps="handled">
         <View style={styles.top}><Pressable onPress={() => router.back()} hitSlop={10}><Feather name="arrow-left" size={22} color={colors.foreground} /></Pressable><AppText style={styles.topTitle}>{template ? 'Edit template' : 'New template'}</AppText><View style={{ width: 22 }} /></View>
         <AppText style={styles.heading}>{template ? 'Update your repeatable flow.' : 'Build your repeatable flow.'}</AppText>
-        <AppText style={[styles.intro, { color: colors.mutedForeground }]}>These steps will be available every time you start a matching project.</AppText>
+        <AppText style={[styles.intro, { color: colors.mutedForeground }]}>Saving updates all linked projects. Existing task dates and completion history are preserved; manual tasks remain independent.</AppText>
 
+        {!!error && <AppText accessibilityRole="alert" style={{ color: colors.destructive }}>{error}</AppText>}
         <Field label="TEMPLATE NAME" value={name} onChangeText={setName} placeholder="e.g. Website launch" colors={colors} />
         <Field label="CATEGORY" value={category} onChangeText={setCategory} placeholder="e.g. Marketing or Operations" colors={colors} />
         <Field label="DESCRIPTION" value={description} onChangeText={setDescription} placeholder="What kind of work is this flow for?" colors={colors} multiline />

@@ -1,3 +1,4 @@
+import { normalizeTemplateLinks, normalizeTemplate, generatedTasks, synchronizeTemplate, detachTemplate } from '@/lib/template-sync';
 import { PROJECT_STATUSES, projectProgress, projectStatus, transitionProject, isArchived, type ProjectStatus } from '@/lib/project-management';
 import { useSettings } from '@/context/SettingsContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -33,12 +34,13 @@ export type WorkflowTemplate = {
 
 export type Project = {
   status?: ProjectStatus;
+  completionSource?: 'auto' | 'manual';
   archived?: boolean;
   id: string;
   name: string;
   client: string;
   summary: string;
-  templateId: string;
+  templateId?: string; // Missing/empty means a legacy or detached project.
   startDate: string;
   projectStartDate?: string;
   dueDate: string;
@@ -48,6 +50,8 @@ export type Project = {
 
 export type ProjectTask = WorkflowStep & {
   dependsOn?: string[];
+  sourceTemplateStepId?: string;
+  templateDetached?: boolean;
   projectId: string;
   status: TaskStatus;
   dueDate: string;
@@ -71,14 +75,14 @@ type FlowContextValue = {
   templates: WorkflowTemplate[];
   hydrated: boolean;
   calendarDate: string;
-  updateTemplate: (id: string, input: Pick<WorkflowTemplate, 'name' | 'category' | 'description' | 'steps'>) => void;
+  updateTemplate: (id: string, input: Pick<WorkflowTemplate, 'name' | 'category' | 'description' | 'steps'>) => boolean;
   deleteTemplate: (id: string) => void;
   addTemplate: (input: {
     name: string;
     category: string;
     description: string;
     steps: WorkflowStep[];
-  }) => void;
+  }) => boolean;
   addProject: (input: {
     name: string;
     client: string;
@@ -174,18 +178,8 @@ const starterProjects: Project[] = [
 ];
 
 const makeTasks = (project: Project, template: WorkflowTemplate): ProjectTask[] => {
-  let cursor = projectStartDate(project);
-  return template.steps.map((step, index) => {
-    const dueDate = addCalendarDays(cursor, step.duration);
-    cursor = dueDate;
-    return {
-      ...step,
-      projectId: project.id,
-      status: index === 0 && project.id === 'p-northstar' ? 'done' : 'todo',
-      dueDate: dueDate.toISOString(),
-      order: index,
-    };
-  });
+  return generatedTasks(project, template).map((task, index) => ({ ...task,
+    status: index === 0 && project.id === 'p-northstar' ? 'done' : 'todo' }));
 };
 
 const starterTasks = starterProjects.flatMap((project) => {
@@ -202,7 +196,7 @@ function recalculateTimeline(project: Project, projectTasks: ProjectTask[]) {
     .sort((a, b) => a.order - b.order)
     .map((task) => {
       // Manual dates are independent of the sequential workflow timeline.
-      if (task.isManual) return task;
+      if (task.isManual || task.templateDetached) return task;
       if (task.status === 'done') {
         const completedAt = task.completedAt ?? task.dueDate;
         const completedDate = new Date(completedAt);
@@ -230,6 +224,8 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
   const generation = dataGeneration();
   const mutable = () => !dataLocked() && generation === dataGeneration();
   const [templateList, setTemplateList] = useState<WorkflowTemplate[]>(templates);
+  const templateRef = useRef(templateList);
+  templateRef.current = templateList;
   const [projects, setProjects] = useState<Project[]>(starterProjects);
   const [tasks, setTasks] = useState<ProjectTask[]>(starterTasks);
   const [hydrated, setHydrated] = useState(false);
@@ -256,7 +252,8 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
     AsyncStorage.getItem(STORAGE_KEY)
       .then((stored) => {
         if (stored) {
-          const parsed = JSON.parse(stored) as { projects: Project[]; tasks: ProjectTask[]; templates?: WorkflowTemplate[]; personalTasks?: PersonalTask[] };
+          const raw = JSON.parse(stored) as { projects: Project[]; tasks: ProjectTask[]; templates?: WorkflowTemplate[]; personalTasks?: PersonalTask[] };
+          const parsed = normalizeTemplateLinks({ ...raw, templates: raw.templates ?? templates });
           personalRef.current = parsed.personalTasks ?? [];
           setPersonalTasks(personalRef.current);
           if (parsed.templates) setTemplateList(parsed.templates);
@@ -323,7 +320,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
     if (!hydrated) return { ok: false, error: 'Please wait for your tasks to load.' };
     const existing = id ? personalRef.current.find((task) => task.id === id) : undefined;
     if (id && !existing) return { ok: false, error: 'This personal task no longer exists.' };
-    const error = validatePersonal(input, new Date(), existing?.status === 'done');
+    const error = validatePersonal(input, new Date(), existing?.status === 'done', existing);
     if (error) return { ok: false, error };
     let notice: string | undefined;
     if (settings.notificationsEnabled && input.reminder !== 'None' && existing?.status !== 'done') {
@@ -353,39 +350,39 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
     description: string;
     steps: WorkflowStep[];
   }) => {
-    if (!mutable()) return;
-    if (!input.name.trim() || !input.steps.length || input.steps.some((step) => !step.title.trim())) return;
+    if (!mutable() || !hydrated) return false;
+    if (!input.name.trim() || !input.steps.length || input.steps.some((step) => !step.title.trim() || !Number.isInteger(step.duration) || step.duration < 0)) return false;
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const palette = ['#F26B5E', '#6BAF92', '#6F83C9', '#B787C8'];
-    setTemplateList((current) => [
-      {
-        id,
-        name: input.name.trim(),
-        category: input.category,
-        description: input.description,
-        steps: input.steps.map((step) => ({ ...step, title: step.title.trim() })),
-        color: palette[current.length % palette.length],
-      },
-      ...current,
-    ]);
+    const next = normalizeTemplate({ id, name: input.name.trim(), category: input.category,
+      description: input.description, steps: input.steps.map((step) => ({ ...step, title: step.title.trim() })),
+      color: palette[templateRef.current.length % palette.length] });
+    templateRef.current = [next, ...templateRef.current]; setTemplateList(templateRef.current);
+    return true;
   };
 
   const updateTemplate: FlowContextValue['updateTemplate'] = (id, input) => {
-    if (!mutable()) return;
-    if (!input.name.trim() || !input.steps.length || input.steps.some((step) => !step.title.trim())) return;
-    // Project tasks are independent snapshots; only the template collection changes.
-    setTemplateList((current) => current.map((template) => template.id === id ? {
-      ...template,
-      name: input.name.trim(),
-      category: input.category,
-      description: input.description,
-      steps: input.steps.map((step) => ({ ...step, title: step.title.trim() })),
-    } : template));
+    if (!mutable() || !hydrated) return false;
+    if (!input.name.trim() || !input.steps.length || input.steps.some((step) => !step.title.trim() || !Number.isInteger(step.duration) || step.duration < 0)) return false;
+    const current = templateRef.current.find((template) => template.id === id);
+    if (!current) return false;
+    let next;
+    try { next = synchronizeTemplate({ ...projectSnapshot.current, templates: templateRef.current }, {
+      ...current, ...input, name: input.name.trim(), steps: input.steps.map((step) => ({ ...step, title: step.title.trim() })),
+    }); } catch { return false; }
+    templateRef.current = next.templates;
+    setTemplateList(next.templates);
+    commitProjectState(next.projects, next.tasks);
+    void syncProjectReminders(next.projects, next.tasks, settings.notificationsEnabled)
+      .catch(() => setPersonalReminderNotice('Template saved. Project reminders could not be updated; reopen the app to retry.'));
+    return true;
   };
 
   const deleteTemplate = (id: string) => {
     if (!mutable()) return;
-    setTemplateList((current) => current.filter((template) => template.id !== id));
+    const next = detachTemplate({ ...projectSnapshot.current, templates: templateRef.current }, id);
+    templateRef.current = next.templates; setTemplateList(next.templates);
+    commitProjectState(next.projects, next.tasks);
   };
 
   // Keep task/status/archive decisions consistent across actions in the same render batch.
@@ -421,11 +418,13 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
       remindersEnabled: true,
       status: 'Active',
     };
-    const template = templateList.find((item) => item.id === input.templateId);
+    const template = templateRef.current.find((item) => item.id === input.templateId);
     if (!template || !template.steps.length) return false;
     const newTasks = makeTasks(project, template);
     commitProjectState([project, ...projectSnapshot.current.projects], [...newTasks, ...projectSnapshot.current.tasks]);
-    if (settings.notificationsEnabled) await scheduleProjectReminders(project, newTasks);
+    // Creation has succeeded; a native permission/reminder error must not invite a duplicate retry.
+    if (settings.notificationsEnabled) void scheduleProjectReminders(project, newTasks)
+      .catch(() => setPersonalReminderNotice('Project created. Reminders could not be updated; reopen the app to retry.'));
     return true;
   };
 
@@ -511,7 +510,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (task.isManual) {
+    if (task.isManual || task.templateDetached) {
       const nextTasks = tasks.map((item) => item.projectId === project.id && item.id === task.id ? {
         ...item, status: task.status === 'done' ? 'todo' as const : 'done' as const,
         completedAt: task.status === 'done' ? undefined : new Date().toISOString(),
@@ -524,7 +523,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
 
     const reopening = task.status === 'done';
     const nextTasks: ProjectTask[] = tasks.map((item) => {
-      if (item.projectId !== task.projectId || item.isManual) return item;
+      if (item.projectId !== task.projectId || item.isManual || item.templateDetached) return item;
       if (reopening && item.order >= task.order) {
         return { ...item, status: 'todo' as const, completedAt: undefined };
       }
@@ -535,7 +534,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
     });
     const recalculated = recalculateTimeline(project, nextTasks.filter((item) => item.projectId === project.id));
     const transitioned = transitionProject(project, tasks, recalculated.tasks, reopening ? 'reopen' : 'complete');
-    const updatedProject = { ...recalculated.project, ...(transitioned.status ? { status: transitioned.status } : {}) };
+    const updatedProject = { ...recalculated.project, ...(transitioned.status ? { status: transitioned.status, completionSource: transitioned.completionSource } : {}) };
     commitProjectState(projects.map((item) => item.id === project.id ? updatedProject : item),
       tasks.map((item) => item.projectId === project.id ? recalculated.tasks.find((nextTask) => nextTask.id === item.id) ?? item : item));
     if (updatedProject.remindersEnabled) void scheduleProjectReminders(updatedProject, recalculated.tasks, false);
@@ -567,7 +566,7 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
     const project = projects.find((item) => item.id === projectId);
     if (!hydrated || !project || !PROJECT_STATUSES.includes(status)) return false;
     if (status === 'Completed' && projectProgress(projectId, tasks).incomplete > 0 && !confirmIncomplete) return false;
-    commitProjectState(projects.map((item) => item.id === projectId ? { ...item, status } : item));
+    commitProjectState(projects.map((item) => item.id === projectId ? { ...item, status, completionSource: status === 'Completed' ? 'manual' : undefined } : item));
     return true;
   };
 
@@ -592,16 +591,16 @@ export function FlowProvider({ children }: { children: React.ReactNode }) {
     commitProjectState(projects.filter((project) => project.id !== projectId), tasks.filter((task) => task.projectId !== projectId));
   };
 
-  const getDataSnapshot = (): AppData => snapshotData({ ...projectSnapshot.current, templates: templateList, personalTasks: personalRef.current, settings: getSettingsSnapshot() });
+  const getDataSnapshot = (): AppData => snapshotData({ ...projectSnapshot.current, templates: templateRef.current, personalTasks: personalRef.current, settings: getSettingsSnapshot() });
   const restoreBackup: FlowContextValue['restoreBackup'] = async (backup) => {
     if (!hydrated || restoring || !mutable()) return { ok: false, error: 'Please wait for data to finish loading or saving.' };
     let validated: Backup;
-    try { validated = parseBackup(JSON.stringify(backup)); }
+    try { validated = parseBackup(JSON.stringify(backup)); validated.data = normalizeTemplateLinks(validated.data); }
     catch (error) { return { ok: false, error: error instanceof Error ? error.message : 'Invalid backup.' }; }
     setRestoring(true);
     const previous = getDataSnapshot();
     const result = await replaceData(validated.data, (data) => {
-      commitProjectState(data.projects, data.tasks); setTemplateList(data.templates);
+      commitProjectState(data.projects, data.tasks); templateRef.current = data.templates; setTemplateList(data.templates);
       personalRef.current = data.personalTasks; setPersonalTasks(data.personalTasks);
       acceptRestoredSettings(data.settings); setStorageError('');
     }, previous);

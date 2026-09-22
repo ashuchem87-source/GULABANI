@@ -13,7 +13,7 @@ const today = dates.localDateValue();
 const date = (offset) => dates.localDateValue(dates.addCalendarDays(dates.readDate(today), offset));
 const project = { id: 'p', name: 'Project', client: 'Client', summary: 'Keep', templateId: 'template', startDate: '2021-04-03T13:45:00.000Z', projectStartDate: '2021-04-03', dueDate: date(3), reminderFrequency: 'Daily', remindersEnabled: false, status: 'Active' };
 const task = (id, extra = {}) => ({ id, projectId: 'p', title: id, description: 'Keep description', duration: 1, order: 0, status: 'todo', dueDate: date(1), ...extra });
-const chain = () => [task('a', { dueDate: date(-3) }), task('b', { dependsOn: ['a'], order: 1 }), task('c', { dependsOn: ['b'], order: 2, dueDate: date(2) })];
+const chain = () => [task('a', { dueDate: date(-3), sourceTemplateStepId: 'a' }), task('b', { dependsOn: ['a'], order: 1 }), task('c', { dependsOn: ['b'], order: 2, dueDate: date(2) })];
 const template = { id: 'template', name: 'CII SELF', category: 'Custom', description: '', color: '#fff', steps: [{ id: 'a', title: 'Original step', description: '', duration: 1 }] };
 const personalTask = { ...plain(personal.PERSONAL_DEFAULTS), id: 'personal', title: 'Personal', status: 'todo', createdAt: new Date().toISOString(), seriesId: 'personal', occurrence: 0, dueDate: today };
 const state = (patch = {}) => ({ projects: [plain(project)], tasks: chain(), templates: [plain(template)], personalTasks: [plain(personalTask)], ...patch });

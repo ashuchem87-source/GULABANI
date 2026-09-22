@@ -3,7 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { host, plain } = require('./flow-test-host.cjs');
-test('legacy CII SELF: edit, unlimited steps, project isolation, delete and reload', async () => {
+test('legacy CII SELF: edit, unlimited steps, linked project sync, safe delete and reload', async () => {
   const storage = {};
   let render = host(storage);
   let flow = await render();
@@ -28,7 +28,13 @@ test('legacy CII SELF: edit, unlimited steps, project isolation, delete and relo
   assert.equal(flow.templates[0].steps.length, 151);
   assert.equal(flow.templates[0].steps[0].description, 'Keep description');
   assert.deepEqual(plain(flow.projects), originalProjects);
-  assert.deepEqual(plain(flow.tasks), originalTasks);
+  const synchronized = plain(flow.tasks);
+  const owner = flow.projects.find((project) => project.templateId === template.id).id;
+  assert.equal(synchronized.filter((task) => task.projectId === owner).length, 151);
+  assert.deepEqual(synchronized.filter((task) => task.projectId !== owner), originalTasks.filter((task) => task.projectId !== owner));
+  const renamed = synchronized.find((task) => task.projectId === owner && task.sourceTemplateStepId === 'legacy-a');
+  assert.equal(renamed.title, 'Renamed first');
+  assert.equal(renamed.id, originalTasks.find((task) => task.projectId === owner && task.sourceTemplateStepId === 'legacy-a').id);
   steps[0].title = 'Caller mutation';
   assert.equal(flow.templates[0].steps[0].title, 'Renamed first');
   const saved = plain(flow.templates);
@@ -41,7 +47,7 @@ test('legacy CII SELF: edit, unlimited steps, project isolation, delete and relo
   render = host(storage);
   flow = await render();
   assert.deepEqual(plain(flow.templates), saved);
-  assert.deepEqual(plain(flow.tasks), originalTasks);
+  assert.deepEqual(plain(flow.tasks), synchronized);
   await flow.addProject({ ...projectInput, name: 'Future' });
   flow = await render();
   assert.equal(flow.tasks.filter((task) => task.projectId === flow.projects[0].id).length, 151);
@@ -49,15 +55,15 @@ test('legacy CII SELF: edit, unlimited steps, project isolation, delete and relo
   flow.templates.forEach((item) => flow.deleteTemplate(item.id));
   flow = await render();
   assert.equal(flow.templates.length, 0);
-  assert.deepEqual(plain(flow.projects), beforeDelete.projects);
-  assert.deepEqual(plain(flow.tasks), beforeDelete.tasks);
+  assert.deepEqual(plain(flow.projects), beforeDelete.projects.map((project) => ({ ...project, templateId: '' })));
+  assert.deepEqual(plain(flow.tasks), beforeDelete.tasks.map(({ sourceTemplateStepId, ...task }) => task.isManual ? task : ({ ...task, templateDetached: true })));
   await flow.addProject(projectInput);
   flow = await render();
-  assert.deepEqual(plain(flow.projects), beforeDelete.projects);
+  assert.deepEqual(plain(flow.projects), beforeDelete.projects.map((project) => ({ ...project, templateId: '' })));
   render = host(storage);
   flow = await render();
   assert.equal(flow.templates.length, 0);
-  assert.deepEqual(plain(flow.tasks), beforeDelete.tasks);
+  assert.deepEqual(plain(flow.tasks), beforeDelete.tasks.map(({ sourceTemplateStepId, ...task }) => task.isManual ? task : ({ ...task, templateDetached: true })));
   assert.equal(flow.projects.length, beforeDelete.projects.length);
 });
 

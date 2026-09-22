@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { host, plain, loadSource } = require('./flow-test-host.cjs');
 const { moveItem, parseTaskDate, openTasksByDueDate } = loadSource('lib/task-utils.ts');
 
-test('reordering persists and affects only projects created afterwards', async () => {
+test('reordering persists and updates linked projects and new projects without changing history', async () => {
   const storage = {};
   let render = host(storage), flow = await render();
   const template = flow.templates[0];
@@ -13,7 +13,9 @@ test('reordering persists and affects only projects created afterwards', async (
   flow.updateTemplate(template.id, { ...template, steps: moved });
   flow = await render();
   assert.deepEqual(plain(flow.projects), projects);
-  assert.deepEqual(plain(flow.tasks), tasks);
+  const expected = tasks.map((task) => task.projectId === projects[0].id ? { ...task, order: moved.findIndex((step) => step.id === task.sourceTemplateStepId) } : task);
+  const synchronized = plain(flow.tasks);
+  assert.deepEqual([...synchronized].sort((a,b)=>a.id.localeCompare(b.id)), [...expected].sort((a,b)=>a.id.localeCompare(b.id)));
   render = host(storage); flow = await render();
   assert.deepEqual(plain(flow.templates[0].steps), plain(moved));
   await flow.addProject({ name: 'After reorder', client: 'Client', summary: '', templateId: template.id,
@@ -22,7 +24,7 @@ test('reordering persists and affects only projects created afterwards', async (
   const generated = flow.tasks.filter((task) => task.projectId === flow.projects[0].id).sort((a, b) => a.order - b.order);
   assert.deepEqual(plain(generated.map((task) => task.title)), plain(moved.map((step) => step.title)));
   assert.deepEqual(plain(generated.map((task) => task.order)), [0, 1, 2, 3]);
-  assert.deepEqual(plain(flow.tasks.filter((task) => task.projectId !== flow.projects[0].id)), tasks);
+  assert.deepEqual(plain(flow.tasks.filter((task) => task.projectId !== flow.projects[0].id)), synchronized);
   flow.addTemplate({ ...template, name: 'Reordered at creation', steps: moved });
   flow = await render();
   assert.deepEqual(plain(flow.templates[0].steps), plain(moved));

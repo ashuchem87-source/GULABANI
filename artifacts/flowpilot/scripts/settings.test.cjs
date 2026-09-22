@@ -101,13 +101,13 @@ test('default priority and reminder affect only new eligible personal tasks', ()
   assert.equal(model.applyReminderDefault(eligible,prefs,false,true).reminder,'None');
   const existing={...eligible,priority:'Low',reminder:'10 minutes before'}, before=JSON.stringify(existing);
   assert.equal(model.personalInitial(prefs,existing).priority,'Low'); assert.equal(model.applyReminderDefault(existing,prefs,true,false).reminder,'10 minutes before'); assert.equal(JSON.stringify(existing),before);
-  assert.match(personal.validatePersonal({...initial,title:'Test',reminder:'At due time'}),/date.*time/i);
+  assert.match(personal.validatePersonal({...initial,title:'Test',reminder:'At due time'}),/time/i);
 });
 test('personal form uses defaults when date/time become eligible and respects explicit None', async () => {
   let saved; const h=ui('app/personal-task.tsx',{hydrated:true,personalTasks:[],savePersonalTask:async input=>{saved=input;return{ok:true};}}, settings({defaultPriority:'High',defaultReminder:'At due time'}));
-  let tree=h.render(); find(tree,'personal-title').props.onChangeText('Task'); walk(tree,n=>n.type==='DateField')[0].props.onChange('2090-06-01'); tree=h.render(); find(tree,'personal-time').props.onChangeText('12:00'); tree=h.render();
+  let tree=h.render(); find(tree,'personal-title').props.onChangeText('Task'); walk(tree,n=>n.type==='DateField')[0].props.onChange('2090-06-01'); tree=h.render(); find(tree,'time-option-12:00').props.onPress(); tree=h.render();
   await find(tree,'save-personal-task').props.onPress(); assert.equal(saved.priority,'High'); assert.equal(saved.reminder,'At due time');
-  const choices=walk(tree,n=>typeof n.type==='function' && n.props?.label==='REMINDER')[0]; choices.props.onSelect('None'); tree=h.render(); find(tree,'personal-time').props.onChangeText('13:00'); tree=h.render(); await find(tree,'save-personal-task').props.onPress(); assert.equal(saved.reminder,'None');
+  const choices=walk(tree,n=>typeof n.type==='function' && n.props?.label==='REMINDER')[0]; choices.props.onSelect('None'); tree=h.render(); find(tree,'time-option-13:00').props.onPress(); tree=h.render(); await find(tree,'save-personal-task').props.onPress(); assert.equal(saved.reminder,'None');
 });
 const projectTasks=[{id:'p1',projectId:'p',status:'todo',dueDate:'2090-01-01'},{id:'p2',projectId:'p',status:'done',dueDate:'2090-01-01'}];
 const personalTasks=[{...personal.PERSONAL_DEFAULTS,id:'a',status:'todo'},{...personal.PERSONAL_DEFAULTS,id:'b',status:'done'}];

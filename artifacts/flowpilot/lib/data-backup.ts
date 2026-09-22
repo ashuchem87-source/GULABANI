@@ -86,7 +86,7 @@ export function validateData(value: unknown): AppData {
   unique(tasks, (r) => JSON.stringify([r.projectId, r.id]), 'Project tasks');
   const projectIds = new Set(projects.map((r) => r.id));
   for (const p of projects) {
-    requireValue(['name', 'client', 'summary', 'templateId'].every((key) => text(p[key])) && date(p.startDate) && date(p.dueDate), 'Invalid project fields or dates.');
+    requireValue(['name', 'client', 'summary'].every((key) => text(p[key])) && date(p.startDate) && date(p.dueDate) && optional(p, 'templateId', text) && optional(p, 'completionSource', enumValue(['auto', 'manual'])), 'Invalid project fields or dates.');
     requireValue(optional(p, 'projectStartDate', (v) => text(v) && !!parseTaskDate(v)) && optional(p, 'status', enumValue(PROJECT_STATUSES)) && optional(p, 'archived', boolean) && optional(p, 'remindersEnabled', boolean) && enumValue(['Daily', 'Every 2 days', 'Weekly'])(p.reminderFrequency), 'Invalid project preferences.');
   }
   for (const t of templates) {
@@ -97,7 +97,7 @@ export function validateData(value: unknown): AppData {
   for (const t of tasks) {
     step(t);
     requireValue(id(t.projectId) && projectIds.has(t.projectId), 'A task references a missing project.');
-    requireValue(enumValue(['todo', 'done'])(t.status) && (t.dueDate === '' || date(t.dueDate)) && numeric(t.order) && Number.isInteger(t.order) && t.order >= 0 && optional(t, 'completedAt', date) && optional(t, 'isManual', boolean), 'Invalid project task fields or dates.');
+    requireValue(enumValue(['todo', 'done'])(t.status) && (t.dueDate === '' || date(t.dueDate)) && numeric(t.order) && Number.isInteger(t.order) && t.order >= 0 && optional(t, 'completedAt', date) && optional(t, 'isManual', boolean) && optional(t, 'sourceTemplateStepId', id) && optional(t, 'templateDetached', boolean) && !(t.sourceTemplateStepId && (t.isManual || t.templateDetached)), 'Invalid project task fields or dates.');
     requireValue(optional(t, 'dependsOn', (v) => Array.isArray(v) && v.every(id)), 'Invalid dependency list.');
     const owned = byProject.get(t.projectId as string) ?? new Map(); owned.set(t.id as string, t); byProject.set(t.projectId as string, owned);
   }
@@ -118,13 +118,13 @@ export function validateData(value: unknown): AppData {
   const personalIds = new Map(personal.map((t) => [t.id, t]));
   for (const t of personal) {
     requireValue(text(t.title) && enumValue(['todo', 'done'])(t.status) && date(t.createdAt) && optional(t, 'completedAt', date) && optional(t, 'dueDate', (v) => text(v) && !!parseTaskDate(v)), 'Invalid personal task fields or dates.');
-    requireValue(optional(t, 'dueTime', (v) => text(v) && /^([01]\d|2[0-3]):[0-5]\d$/.test(v) && !!t.dueDate) && enumValue(PRIORITIES)(t.priority) && text(t.notes) && enumValue(REMINDERS)(t.reminder), 'Invalid personal task preferences.');
+    requireValue(optional(t, 'dueTime', (v) => text(v) && /^([01]\d|2[0-3]):[0-5]\d$/.test(v)) && enumValue(PRIORITIES)(t.priority) && text(t.notes) && enumValue(REMINDERS)(t.reminder), 'Invalid personal task preferences.');
     requireValue(object(t.recurrence) && enumValue(REPEATS)((t.recurrence as RecordValue).frequency), 'Invalid recurrence.');
     const recurrence = t.recurrence as RecordValue;
-    requireValue(optional(recurrence, 'anchorDay', (v) => numeric(v) && Number.isInteger(v) && v >= 1 && v <= 31) && (recurrence.frequency === 'None' || !!t.dueDate), 'Invalid recurrence date.');
-    requireValue(id(t.seriesId) && numeric(t.occurrence) && Number.isInteger(t.occurrence) && t.occurrence >= 0 && optional(t, 'nextOccurrenceId', id), 'Invalid recurrence history.');
+    requireValue(optional(recurrence, 'anchorDay', (v) => numeric(v) && Number.isInteger(v) && v >= 1 && v <= 31) && (!['Weekly', 'Monthly'].includes(String(recurrence.frequency)) || !!t.dueDate), 'Invalid recurrence date.');
+    requireValue(id(t.seriesId) && numeric(t.occurrence) && Number.isInteger(t.occurrence) && t.occurrence >= 0 && optional(t, 'nextOccurrenceId', id) && optional(t, 'availableFrom', (v) => text(v) && !!parseTaskDate(v)), 'Invalid recurrence history.');
     if (t.nextOccurrenceId && personalIds.has(t.nextOccurrenceId)) requireValue(t.nextOccurrenceId !== t.id && personalIds.get(t.nextOccurrenceId)!.seriesId === t.seriesId && Number(personalIds.get(t.nextOccurrenceId)!.occurrence) > Number(t.occurrence), 'Invalid recurrence chain.');
-    requireValue(t.reminder === 'None' || (!!t.dueDate && !!t.dueTime), 'A personal reminder needs a date and time.');
+    requireValue(t.reminder === 'None' || !!t.dueTime, 'A personal reminder needs a time.');
   }
   requireValue(data.settings === undefined || object(data.settings), 'Settings must be an object.');
   const settings = (data.settings ?? {}) as RecordValue;

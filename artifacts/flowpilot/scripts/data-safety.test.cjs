@@ -18,6 +18,7 @@ function data() { return {
   personalTasks: [{ ...plain(personal.PERSONAL_DEFAULTS), id: 'personal', title: 'Personal', dueDate: relative(3), dueTime: '12:30', priority: 'Critical', notes: 'Multi\nline, "notes"', reminder: '1 hour before', recurrence: { frequency: 'Monthly', anchorDay: 22 }, status: 'todo', createdAt: '2021-02-01T04:05:06.000Z', seriesId: 'series', occurrence: 3, future: 42 }],
   settings: { ...plain(settingsModel.DEFAULT_SETTINGS), theme: 'Dark', dateFormat: 'DD MMM YYYY', future: { enabled: true } },
 }; }
+const migrated = (value) => ({ ...value, tasks: value.tasks.map((task) => task.id === 'a' && !task.isManual ? { ...task, sourceTemplateStepId: 'a' } : task) });
 const empty = () => ({ projects: [], tasks: [], templates: [], personalTasks: [], settings: plain(settingsModel.DEFAULT_SETTINGS) });
 const encoded = (value = data()) => backup.serializeBackup(value, fixed);
 const roundtrip = (value = data()) => backup.parseBackup(encoded(value));
@@ -170,11 +171,11 @@ function integration(initial = data(), extras = {}) {
 }
 test('provider restore updates memory, disk, preferences and derived selectors without new IDs/dates', async () => {
   const h = integration(empty()); let flow = await h.render(); const value = backup.createBackup(data(), fixed);
-  assert.equal((await flow.restoreBackup(value)).ok, true); flow = await h.render(); assert.deepEqual(plain(flow.getDataSnapshot()), data()); assert.deepEqual(plain(h.preferences()), data().settings);
+  assert.equal((await flow.restoreBackup(value)).ok, true); flow = await h.render(); assert.deepEqual(plain(flow.getDataSnapshot()), migrated(data())); assert.deepEqual(plain(h.preferences()), data().settings);
   assert.equal(workflow.getTaskWorkflowState(flow.tasks[1], flow.tasks), 'Blocked'); assert.equal(management.projectProgress('p', flow.tasks).percent, 33); assert.equal(management.normalProjectTasks(flow.tasks, flow.projects).length, 3);
   assert.equal(workflow.getPotentiallyImpactedTasks('p', flow.tasks, today).length, 1); assert.equal(dashboard.dashboardCounts(dashboard.dashboardGroups(flow.tasks, flow.personalTasks, today)).overdue, 1);
   const proposal = workflow.buildRescheduleProposal(flow.projects[0], flow.tasks, 'a', today); assert.equal(proposal.changes.length, 1); assert.equal(flow.tasks[1].dueDate, relative(2));
-  const reloaded = integration(flow.getDataSnapshot()); assert.deepEqual(plain((await reloaded.render()).getDataSnapshot()), data());
+  const reloaded = integration(flow.getDataSnapshot()); assert.deepEqual(plain((await reloaded.render()).getDataSnapshot()), migrated(data()));
 });
 for (const kind of ['format', 'version', 'graph']) test('provider invalid restore changes nothing: ' + kind, async () => {
   const h = integration(); let flow = await h.render(); const before = plain(flow.getDataSnapshot()), value = backup.createBackup(data()); if (kind === 'format') value.format = 'bad'; if (kind === 'version') value.version = 999; if (kind === 'graph') value.data.tasks[0].dependsOn = ['b'];
@@ -182,7 +183,7 @@ for (const kind of ['format', 'version', 'graph']) test('provider invalid restor
 });
 test('provider restore write failure keeps old memory and disk', async () => {
   const h = integration(); let flow = await h.render(); let failed = false; h.fail((method, key) => { if (method === 'setItem' && key === keys.settings && !failed) { failed = true; return true; } return false; });
-  assert.equal((await flow.restoreBackup(backup.createBackup(empty()))).ok, false); flow = await h.render(); assert.deepEqual(plain(flow.getDataSnapshot()), data()); assert.deepEqual(JSON.parse(h.values.get(keys.settings)), data().settings);
+  assert.equal((await flow.restoreBackup(backup.createBackup(empty()))).ok, false); flow = await h.render(); assert.deepEqual(plain(flow.getDataSnapshot()), migrated(data())); assert.deepEqual(JSON.parse(h.values.get(keys.settings)), data().settings);
 });
 test('successful restore reconciles only restored datasets and preferences', async () => {
   const h = integration(); let flow = await h.render(); const next = empty(); next.settings.notificationsEnabled = false;
@@ -195,7 +196,7 @@ test('stale callbacks and pending personal permission cannot mutate restored rec
   let release; const h = integration(data(), { '@/lib/personal-notifications': { syncPersonalReminders: async () => undefined, askPersonalReminderPermission: () => new Promise((resolve) => { release = resolve; }) } }); let flow = await h.render();
   const saved = flow.savePersonalTask({ ...data().personalTasks[0], dueDate: relative(5) }); const oldToggle = flow.toggleTask; await flow.restoreBackup(backup.createBackup(empty())); release(); assert.equal((await saved).ok, false); oldToggle('a', 'p'); flow = await h.render(); assert.equal(flow.tasks.length, 0); assert.equal(flow.personalTasks.length, 0);
 });
-test('normal hydration never migrates historical data for backup', async () => { const source = data(), h = integration(source); const flow = await h.render(); assert.deepEqual(plain(flow.getDataSnapshot()), source); assert.equal(flow.tasks[3].completedAt, undefined); });
+test('normal hydration adds reliable linkage without changing historical data', async () => { const source = data(), h = integration(source); const flow = await h.render(); assert.deepEqual(plain(flow.getDataSnapshot()), migrated(source)); assert.equal(flow.tasks[3].completedAt, undefined); });
 test('failed normal hydration never overwrites original stored data', async () => { const h = integration(); h.fail((method, key) => method === 'getItem' && key === keys.flow); const flow = await h.render(); assert.equal(flow.hydrated, false); assert.match(flow.storageError, /could not be loaded/); assert.equal(h.calls.some((call) => call[0] === 'setItem'), false); });
 
 function files(options = {}) {

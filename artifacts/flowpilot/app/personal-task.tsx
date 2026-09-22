@@ -9,7 +9,7 @@ import { AppText } from '@/components/AppText';
 import { ProjectDateField } from '@/components/ProjectDateField';
 import { useFlow } from '@/context/FlowContext';
 import { useColors } from '@/hooks/useColors';
-import { PRIORITIES, REMINDERS, REPEATS, personalDueAt, validatePersonal, type PersonalInput, type PersonalTask } from '@/lib/personal-tasks';
+import { TIME_OPTIONS, PRIORITIES, REMINDERS, REPEATS, personalDueAt, validatePersonal, type PersonalInput, type PersonalTask } from '@/lib/personal-tasks';
 
 export default function PersonalTaskScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -23,7 +23,8 @@ export default function PersonalTaskScreen() {
 function PersonalForm({ task }: { task?: PersonalTask }) {
   const colors = useColors(), insets = useSafeAreaInsets();
   const { settings } = useSettings();
-  const reminderTouched = useRef(false);
+  const reminderTouched = useRef(false), submitting = useRef(false);
+  const [showTime, setShowTime] = useState(false);
   const { savePersonalTask, deletePersonalTask } = useFlow();
   const [input, setInput] = useState<PersonalInput>(() => personalInitial(settings, task));
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [confirmDelete, setConfirmDelete] = useState(false);
@@ -32,17 +33,17 @@ function PersonalForm({ task }: { task?: PersonalTask }) {
     if (key === 'reminder') reminderTouched.current = true;
     change({ [key]: value });
   };
-  const validation = validatePersonal(input, new Date(), task?.status === 'done');
+  const validation = validatePersonal(input, new Date(), task?.status === 'done', task);
   const save = async () => {
-    if (busy) return;
+    if (submitting.current) return;
     if (validation) { setError(validation); return; }
-    setBusy(true);
+    submitting.current = true; setBusy(true);
     try {
       const result = await savePersonalTask(input, task?.id);
       if (result.ok) router.replace('/tasks');
       else setError(result.error ?? 'Unable to save this to-do.');
     } catch { setError('Unable to save this to-do. Please try again.'); }
-    finally { setBusy(false); }
+    finally { submitting.current = false; setBusy(false); }
   };
   const inputStyle = [styles.input, { backgroundColor: colors.card, borderColor: colors.input, color: colors.foreground }];
   return <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -50,18 +51,24 @@ function PersonalForm({ task }: { task?: PersonalTask }) {
       <View style={styles.top}><Pressable accessibilityLabel="Back" onPress={() => router.back()} hitSlop={10}><Feather name="arrow-left" size={22} color={colors.foreground} /></Pressable><AppText style={styles.heading}>{task ? 'Edit personal to-do' : 'Add personal to-do'}</AppText></View>
       <AppText style={{ color: colors.mutedForeground }}>For everyday life. No project needed.</AppText>
       <AppText style={styles.label}>TASK NAME</AppText><TextInput testID="personal-title" accessibilityLabel="Task name" value={input.title} onChangeText={(value) => set('title', value)} placeholder="e.g. Call daughter" placeholderTextColor={colors.mutedForeground} style={inputStyle} />
-      <ProjectDateField label="DUE DATE (OPTIONAL)" optional value={input.dueDate ?? ''} onChange={(value) => change({ dueDate: value || undefined, ...(value ? {} : { dueTime: undefined, reminder: 'None', recurrence: { frequency: 'None' } }) })} />
-      <AppText style={styles.label}>DUE TIME (OPTIONAL, 24-HOUR)</AppText><TextInput testID="personal-time" accessibilityLabel="Due time, HH:mm" value={input.dueTime ?? ''} onChangeText={(value) => set('dueTime', value || undefined)} editable={!!input.dueDate} placeholder="HH:mm" maxLength={5} autoCapitalize="none" placeholderTextColor={colors.mutedForeground} style={inputStyle} />
+      <ProjectDateField label="DUE DATE (OPTIONAL)" optional value={input.dueDate ?? ''} onChange={(value) => change({ dueDate: value || undefined })} />
+      <AppText style={styles.label}>DUE TIME (OPTIONAL, 24-HOUR)</AppText>
+      <Pressable testID="personal-time" accessibilityRole="button" accessibilityLabel={`Choose due time, ${input.dueTime ?? 'No Time'}`} onPress={() => setShowTime(true)} style={[...inputStyle, { justifyContent: 'center' }]}><AppText>{input.dueTime ?? 'No Time'}</AppText></Pressable>
       <Choices label="PRIORITY" values={PRIORITIES} selected={input.priority} onSelect={(value) => set('priority', value)} />
       <AppText style={styles.label}>NOTES</AppText><TextInput testID="personal-notes" accessibilityLabel="Notes" multiline value={input.notes} onChangeText={(value) => set('notes', value)} placeholder="Anything to remember…" placeholderTextColor={colors.mutedForeground} style={[inputStyle, { minHeight: 100, textAlignVertical: 'top', paddingTop: 14 }]} />
       <Choices label="REMINDER" values={REMINDERS} selected={input.reminder} onSelect={(value) => set('reminder', value)} disabled={(value) => value !== 'None' && (!input.dueTime || !personalDueAt(input))} />
-      {(!input.dueDate || !input.dueTime) && <AppText style={[styles.hint, { color: colors.mutedForeground }]}>Set a date and time to enable reminders.</AppText>}
-      <Choices label="REPEAT" values={REPEATS} selected={input.recurrence.frequency} onSelect={(value) => set('recurrence', { frequency: value })} disabled={(value) => value !== 'None' && !input.dueDate} />
-      <AppText style={[styles.hint, { color: colors.mutedForeground }]}>Repeating tasks need a date. Completing one creates the next occurrence from its due date. Reopening keeps that next occurrence; edits and deletion affect only this occurrence.</AppText>
+      {(!input.dueTime) && <AppText style={[styles.hint, { color: colors.mutedForeground }]}>Set a time to enable reminders. Without a date, the next eligible local time is used.</AppText>}
+      <Choices label="REPEAT" values={REPEATS} selected={input.recurrence.frequency} onSelect={(value) => set('recurrence', { frequency: value })} disabled={(value) => (value === 'Weekly' || value === 'Monthly') && !input.dueDate} />
+      <AppText style={[styles.hint, { color: colors.mutedForeground }]}>Daily repeat works with or without a date or time. Undated daily tasks create the next occurrence for tomorrow. Weekly and Monthly need an anchor date. Reopening keeps that next occurrence; edits and deletion affect only this occurrence.</AppText>
       {!!error && <AppText accessibilityRole="alert" style={{ color: colors.destructive }}>{error}</AppText>}
       <Pressable testID="save-personal-task" accessibilityRole="button" disabled={busy} onPress={save} style={[styles.button, { backgroundColor: colors.action, opacity: busy ? 0.5 : 1 }]}><AppText style={styles.buttonText}>{busy ? 'Saving…' : 'Save To-do'}</AppText></Pressable>
       {!!task && <Pressable testID="delete-personal-task" disabled={busy} accessibilityRole="button" onPress={() => setConfirmDelete(true)} style={styles.button}><AppText style={{ color: colors.destructive }}>Delete To-do</AppText></Pressable>}
     </ScrollView>
+    <Modal visible={showTime} transparent animationType="fade" onRequestClose={() => setShowTime(false)}><View style={styles.overlay}><View accessibilityViewIsModal style={[styles.dialog, { backgroundColor: colors.card, maxHeight: '80%' }]}>
+      <AppText style={styles.heading}>Choose due time</AppText>
+      <ScrollView>{['No Time', ...TIME_OPTIONS].map((time) => <Pressable key={time} testID={`time-option-${time}`} accessibilityRole="radio" accessibilityLabel={time} accessibilityState={{ checked: (input.dueTime ?? 'No Time') === time }} onPress={() => { set('dueTime', time === 'No Time' ? undefined : time); setShowTime(false); }} style={[styles.choice, { marginBottom: 6, borderColor: colors.border, backgroundColor: input.dueTime === time ? colors.secondary : colors.card }]}><AppText>{time}</AppText></Pressable>)}</ScrollView>
+      <Pressable accessibilityRole="button" onPress={() => setShowTime(false)} style={styles.button}><AppText>Cancel</AppText></Pressable>
+    </View></View></Modal>
     <Modal visible={confirmDelete} transparent animationType="fade" onRequestClose={() => setConfirmDelete(false)}><View style={styles.overlay}><View accessibilityViewIsModal style={[styles.dialog, { backgroundColor: colors.card }]}>
       <AppText style={styles.heading}>Delete this personal to-do?</AppText><AppText style={styles.hint}>This occurrence will be permanently deleted. Other occurrences and project tasks will be kept.</AppText>
       <Pressable accessibilityRole="button" onPress={() => setConfirmDelete(false)} style={styles.button}><AppText>Cancel</AppText></Pressable>

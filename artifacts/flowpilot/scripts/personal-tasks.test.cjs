@@ -79,9 +79,9 @@ test('no-project empty account and legacy data without personalTasks load normal
 test('reminder and date/time validation rejects invalid combinations; blank title never saves', async () => {
   const now = new Date('2025-01-01T00:00:00Z');
   for (const overrides of [
-    { title: ' ' }, { dueTime: '12:00' }, { dueDate: '2026-02-30' }, { dueDate: '2026-10-01', dueTime: '24:00' },
+    { title: ' ' }, { dueTime: '25:00' }, { dueDate: '2026-02-30' }, { dueDate: '2026-10-01', dueTime: '24:00' },
     { reminder: 'At due time' }, { dueDate: '2026-10-01', reminder: '10 minutes before' },
-    { recurrence: { frequency: 'Daily' } }, { priority: 'Urgent' },
+    { recurrence: { frequency: 'Weekly' } }, { priority: 'Urgent' },
     { dueDate: '2020-01-01', dueTime: '10:00', reminder: 'At due time' },
   ]) assert.ok(validatePersonal(input(overrides), now));
   assert.equal(validatePersonal(input(), now), null);
@@ -331,8 +331,8 @@ test('personal form rejects blank title, saves editable notes, and confirms dele
   tree = h.render();
   walk(tree, (node) => node.props?.testID === 'delete-personal-task')[0].props.onPress(); tree = h.render();
   assert.equal(deleted, undefined);
-  assert.equal(walk(tree, (node) => node.type === 'Modal')[0].props.visible, true);
-  walk(tree, (node) => node.type === 'Modal')[0].props.onRequestClose(); tree = h.render();
+  assert.equal(walk(tree, (node) => node.type === 'Modal' && node.props.visible)[0].props.visible, true);
+  walk(tree, (node) => node.type === 'Modal' && node.props.visible)[0].props.onRequestClose(); tree = h.render();
   assert.equal(deleted, undefined);
   walk(tree, (node) => node.props?.testID === 'delete-personal-task')[0].props.onPress(); tree = h.render();
   walk(tree, (node) => node.props?.testID === 'confirm-delete-personal')[0].props.onPress();

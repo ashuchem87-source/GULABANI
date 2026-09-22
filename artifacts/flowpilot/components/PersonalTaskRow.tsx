@@ -5,14 +5,15 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { AppText } from '@/components/AppText';
 import { daysRemaining, useFlow } from '@/context/FlowContext';
 import { useColors } from '@/hooks/useColors';
-import type { PersonalTask } from '@/lib/personal-tasks';
+import { personalDay, type PersonalTask } from '@/lib/personal-tasks';
 
 export function PersonalTaskRow({ task }: { task: PersonalTask }) {
   const colors = useColors();
   const formatShortDate = useDateFormatter();
   const { completePersonalTask, reopenPersonalTask } = useFlow();
   const done = task.status === 'done';
-  const days = task.dueDate ? daysRemaining(task.dueDate) : null;
+  const day = personalDay(task);
+  const days = day ? daysRemaining(day) : null;
   const due = days === null ? 'No due date' : days === 0 ? 'Due today' : days < 0 ? `${-days}d overdue` : `${days}d left`;
   return <View style={[styles.row, { borderBottomColor: colors.border }]}>
     <Pressable testID={`personal-complete-${task.id}`} accessibilityRole="checkbox" accessibilityState={{ checked: done }} accessibilityLabel={`${done ? 'Reopen' : 'Complete'} ${task.title}`} onPress={() => done ? reopenPersonalTask(task.id) : completePersonalTask(task.id)} style={styles.checkTouch}>
